@@ -72,7 +72,7 @@ function endpointIcon(color: string): L.DivIcon {
  * distancia que lleva. La foto se mantiene discreta a proposito para que no
  * tape el recorrido cuando varios amigos coinciden en la misma calle.
  */
-const FRIEND_MARKER_SIZE = 26
+const FRIEND_MARKER_SIZE = 22
 
 function friendIcon(presence: LivePresence): L.DivIcon {
   const name = presence.displayName ?? 'Amigo'
@@ -81,9 +81,16 @@ function friendIcon(presence: LivePresence): L.DivIcon {
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
     .join('')
+
+  // La geometria va en el propio elemento, no solo en la hoja de estilos: un
+  // marcador de mapa no puede quedar gigante porque el navegador sirva una
+  // version cacheada del CSS. La hoja solo aporta color y sombra.
+  const box = `width:${FRIEND_MARKER_SIZE}px;height:${FRIEND_MARKER_SIZE}px`
   const avatar = presence.photoURL
-    ? `<img src="${escapeHtml(presence.photoURL)}" alt="" referrerpolicy="no-referrer" />`
-    : `<span>${escapeHtml(initials)}</span>`
+    ? `<img src="${escapeHtml(presence.photoURL)}" alt="" referrerpolicy="no-referrer"
+         style="${box};border-radius:50%;object-fit:cover;display:block" />`
+    : `<span style="font-size:9px;line-height:1;font-weight:800">${escapeHtml(initials)}</span>`
+
   const modifier =
     presence.status === 'paused'
       ? ' is-paused'
@@ -91,18 +98,21 @@ function friendIcon(presence: LivePresence): L.DivIcon {
         ? ' is-riding'
         : ''
 
-  // La unidad se lee del ajuste del usuario que mira el mapa, no del emisor.
-  const distance =
-    presence.distance > 0
-      ? `<em>${escapeHtml(formatDistance(presence.distance, getSettings().distanceUnit))}</em>`
-      : ''
+  // Contador de la carrera en curso: aparece en cuanto esa persona empieza a
+  // grabar, aunque lleve 0.00 km, y desaparece si solo tiene la app abierta.
+  const riding = presence.status === 'recording' || presence.status === 'paused'
+  const distance = riding
+    ? `<em style="font-style:normal;font-size:9px;line-height:1.25">` +
+      `${escapeHtml(formatDistance(presence.distance, getSettings().distanceUnit))}</em>`
+    : ''
 
   return L.divIcon({
     className: '',
     html:
-      `<div class="friend-marker${modifier}">${avatar}` +
-      `<span class="friend-marker__label"><b>${escapeHtml(name.split(' ')[0])}</b>${distance}</span>` +
-      `</div>`,
+      `<div class="friend-marker${modifier}" style="${box}">${avatar}` +
+      `<span class="friend-marker__label" style="top:${FRIEND_MARKER_SIZE + 3}px">` +
+      `<b style="font-size:10px;line-height:1.25">${escapeHtml(name.split(' ')[0])}</b>${distance}` +
+      `</span></div>`,
     iconSize: [FRIEND_MARKER_SIZE, FRIEND_MARKER_SIZE],
     iconAnchor: [FRIEND_MARKER_SIZE / 2, FRIEND_MARKER_SIZE / 2],
   })
