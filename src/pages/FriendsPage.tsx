@@ -220,6 +220,12 @@ export function FriendsPage() {
               No se ha podido publicar tu posición: {live.lastError}
             </Notice>
           )}
+
+          <p className="field__hint" style={{ marginTop: 'var(--gap-3)' }}>
+            <strong>Con la pantalla bloqueada dejas de emitir.</strong> El navegador congela la
+            página y corta el acceso al GPS; es una limitación del sistema, no de la app. Para una
+            salida larga, empieza una carrera: la pantalla se mantiene encendida mientras grabas.
+          </p>
         </div>
       </section>
 
