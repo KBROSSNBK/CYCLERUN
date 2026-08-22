@@ -29,10 +29,11 @@ jobs:
           node-version: 20
           cache: npm
 
-      - uses: actions/setup-java@v4
+      # firebase-tools 15 exige JDK 21 o superior para el emulador.
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - run: npm ci
 
