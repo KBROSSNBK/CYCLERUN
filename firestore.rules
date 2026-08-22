@@ -1,0 +1,106 @@
+rules_version = '2';
+
+/**
+ * Reglas de seguridad de CYCLERUN.
+ *
+ * Principios:
+ *  1. Cada usuario solo accede a sus propias carreras.
+ *  2. No existe ningun listado de usuarios que se pueda explorar: para
+ *     encontrar a alguien hay que conocer su codigo de amistad o su correo
+ *     exacto, y aun asi solo se puede crear una solicitud.
+ *  3. La ubicacion en vivo solo la leen los amigos aceptados, que son los uid
+ *     que el propio emisor incluye en `visibleTo`.
+ *  4. Nada es publico. Sin sesion iniciada no se lee ni se escribe nada.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // ---------------------------------------------------------------- usuario
+    match /users/{uid} {
+      // El perfil solo lo lee su dueno: los datos que los amigos necesitan
+      // (nombre y foto) se copian en el documento de amistad.
+      allow read: if isUser(uid);
+      allow create, update: if isUser(uid);
+      allow delete: if false;
+
+      // ------------------------------------------------------------ carreras
+      match /rides/{rideId} {
+        allow read, write: if isUser(uid);
+
+        // Recorrido troceado
+        match /track/{chunkId} {
+          allow read, write: if isUser(uid);
+        }
+      }
+
+      // -------------------------------------------------------------- amigos
+      match /friends/{friendId} {
+        allow read: if isUser(uid);
+
+        // Puedo anadir a mi propia lista; y quien recibio mi solicitud puede
+        // anadirse a la mia al aceptarla (por eso se comprueba que exista).
+        allow create: if isUser(uid)
+          || (isUser(friendId)
+              && exists(/databases/$(database)/documents/users/$(friendId)/friendRequests/$(uid)));
+        allow update: if isUser(uid);
+        // Cualquiera de los dos puede deshacer la amistad.
+        allow delete: if isUser(uid) || isUser(friendId);
+      }
+
+      // --------------------------------------------------------- solicitudes
+      match /friendRequests/{fromUid} {
+        allow read: if isUser(uid);
+        // Solo se puede crear una solicitud en nombre propio.
+        allow create: if isUser(fromUid)
+          && request.resource.data.fromUid == fromUid;
+        allow update: if false;
+        // La borra quien la recibe (al aceptar o rechazar) o quien la envio.
+        allow delete: if isUser(uid) || isUser(fromUid);
+      }
+    }
+
+    // ------------------------------------------------- indices de busqueda
+    // Solo contienen un uid: ni nombres, ni correos, ni ningun dato personal.
+
+    match /friendCodes/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /emailIndex/{hash} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // ----------------------------------------------------- ubicacion en vivo
+    match /liveLocations/{uid} {
+      // La lee su dueno y los amigos a los que se la esta compartiendo.
+      allow read: if isUser(uid)
+        || (signedIn() && request.auth.uid in resource.data.visibleTo);
+      // Solo se escribe la propia, y siempre firmada con el uid correcto.
+      allow create, update: if isUser(uid) && request.resource.data.uid == uid;
+      allow delete: if isUser(uid);
+    }
+
+    // Todo lo que no este contemplado arriba queda denegado.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

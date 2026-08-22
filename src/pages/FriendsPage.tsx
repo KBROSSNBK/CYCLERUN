@@ -1,0 +1,356 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { FriendsMap } from '@/components/RouteMap'
+import { ConfirmDialog, EmptyState, Notice, Spinner, Switch } from '@/components/ui'
+import { firebaseEnabled } from '@/firebase/app'
+import { useAuth } from '@/hooks/useAuth'
+import { useFriends } from '@/hooks/useFriends'
+import { useSettings } from '@/hooks/useSettings'
+import type { Friend, LivePresence } from '@/types'
+import { formatDistance, formatRelative, formatSpeedWithUnit } from '@/utils/format'
+
+/**
+ * Amigos y mapa en vivo.
+ *
+ * Para agregar a alguien hace falta su codigo de amistad o su correo exacto:
+ * no existe un directorio que se pueda explorar. La ubicacion en vivo solo se
+ * comparte entre amigos aceptados y unicamente si se activa el interruptor.
+ */
+export function FriendsPage() {
+  const { user, mode, signIn } = useAuth()
+  const { settings, update } = useSettings()
+  const { friends, requests, liveFriends, friendCode, loading, addFriend, accept, reject, remove } =
+    useFriends()
+
+  const [query, setQuery] = useState('')
+  const [message, setMessage] = useState<{ tone: 'info' | 'danger'; text: string } | null>(null)
+  const [sending, setSending] = useState(false)
+  const [pendingRemoval, setPendingRemoval] = useState<Friend | null>(null)
+
+  if (!firebaseEnabled) {
+    return (
+      <>
+        <h1 className="page-title">Amigos</h1>
+        <Notice tone="warn" icon="📵">
+          Los amigos necesitan Firebase. Configura tu proyecto siguiendo el README y vuelve a
+          entrar con tu cuenta de Google.
+        </Notice>
+      </>
+    )
+  }
+
+  if (!user) {
+    return (
+      <>
+        <h1 className="page-title">Amigos</h1>
+        <EmptyState
+          icon="👥"
+          title="Entra con Google"
+          description="Necesitas iniciar sesión para tener amigos y ver dónde están mientras pedaláis."
+          action={
+            <button type="button" className="btn btn--primary" onClick={() => void signIn()}>
+              Entrar con Google
+            </button>
+          }
+        />
+        {mode === 'anonymous' && (
+          <Notice tone="info" icon="🔒">
+            Tu ubicación solo se comparte con quien aceptes como amigo, y solo mientras tengas una
+            carrera en curso con la opción activada.
+          </Notice>
+        )}
+      </>
+    )
+  }
+
+  const handleAdd = async () => {
+    setSending(true)
+    setMessage(null)
+    try {
+      const text = await addFriend(query)
+      setMessage({ tone: 'info', text })
+      setQuery('')
+    } catch (error) {
+      setMessage({ tone: 'danger', text: (error as Error).message })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const shareCode = async () => {
+    if (!friendCode) return
+    const text = `Añádeme en CYCLERUN con mi código de amistad: ${friendCode}`
+    if (navigator.share) {
+      await navigator.share({ text }).catch(() => undefined)
+      return
+    }
+    await navigator.clipboard?.writeText(friendCode).catch(() => undefined)
+    setMessage({ tone: 'info', text: 'Código copiado al portapapeles.' })
+  }
+
+  return (
+    <>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Amigos</h1>
+          <p className="page-subtitle">
+            {friends.length} {friends.length === 1 ? 'amigo' : 'amigos'}
+            {liveFriends.length > 0 && ` · ${liveFriends.length} en ruta ahora`}
+          </p>
+        </div>
+      </div>
+
+      {liveFriends.length > 0 && (
+        <section className="section" style={{ marginTop: 0 }}>
+          <h2 className="section__title">
+            <span className="dot dot--pulse" style={{ color: 'var(--accent)' }} /> En vivo
+          </h2>
+          <FriendsMap presences={liveFriends} className="map map--live" />
+          <div className="stack" style={{ marginTop: 'var(--gap-3)' }}>
+            {liveFriends.map((presence) => (
+              <LiveFriendRow key={presence.uid} presence={presence} settings={settings} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="section">
+        <h2 className="section__title">Compartir mi posición</h2>
+        <div className="card">
+          <div className="field" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+            <div className="field__row">
+              <div>
+                <p className="field__label">Ubicación en vivo</p>
+                <p className="field__hint">
+                  Mientras grabas una carrera, tus amigos verán dónde estás. Se deja de compartir
+                  al finalizar.
+                </p>
+              </div>
+              <Switch
+                checked={settings.shareLiveLocation}
+                onChange={(value) => update({ shareLiveLocation: value })}
+                label="Compartir ubicación en vivo"
+              />
+            </div>
+          </div>
+          {settings.shareLiveLocation && friends.length === 0 && (
+            <p className="field__hint" style={{ marginTop: 'var(--gap-3)' }}>
+              Todavía no tienes amigos, así que no se está compartiendo nada.
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="section">
+        <h2 className="section__title">Mi código de amistad</h2>
+        <div className="card card--accent">
+          <div className="row row--between">
+            <span className="friend-code numeric">{friendCode ?? '······'}</span>
+            <button
+              type="button"
+              className="btn btn--sm"
+              disabled={!friendCode}
+              onClick={() => void shareCode()}
+            >
+              Compartir
+            </button>
+          </div>
+          <p className="field__hint" style={{ marginTop: 'var(--gap-3)' }}>
+            Dáselo a quien quieras que te añada. También pueden encontrarte por el correo de tu
+            cuenta de Google.
+          </p>
+        </div>
+      </section>
+
+      <section className="section">
+        <h2 className="section__title">Añadir amigo</h2>
+        <div className="card stack">
+          <input
+            type="text"
+            value={query}
+            placeholder="Código de amistad o correo"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !sending) void handleAdd()
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={sending || query.trim().length === 0}
+            onClick={() => void handleAdd()}
+          >
+            {sending ? 'Enviando…' : 'Enviar solicitud'}
+          </button>
+          {message && (
+            <Notice tone={message.tone} icon={message.tone === 'danger' ? '⚠️' : '✅'}>
+              {message.text}
+            </Notice>
+          )}
+        </div>
+      </section>
+
+      {requests.length > 0 && (
+        <section className="section">
+          <h2 className="section__title">Solicitudes recibidas</h2>
+          <div className="stack">
+            {requests.map((request) => (
+              <div key={request.fromUid} className="card">
+                <div className="row row--between">
+                  <div className="row">
+                    <Avatar url={request.photoURL} name={request.displayName} />
+                    <div>
+                      <p style={{ fontWeight: 700 }}>{request.displayName ?? 'Ciclista'}</p>
+                      <p className="text-dim" style={{ fontSize: '0.75rem' }}>
+                        {request.email ?? formatRelative(request.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="btn-group" style={{ marginTop: 'var(--gap-3)' }}>
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    onClick={() => void reject(request)}
+                  >
+                    Rechazar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--primary"
+                    onClick={() => void accept(request)}
+                  >
+                    Aceptar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="section">
+        <h2 className="section__title">Mis amigos</h2>
+        {loading ? (
+          <Spinner label="Cargando…" />
+        ) : friends.length === 0 ? (
+          <EmptyState
+            icon="🤝"
+            title="Todavía no tienes amigos"
+            description="Comparte tu código de amistad o añade a alguien por su correo."
+          />
+        ) : (
+          <div className="stack">
+            {friends.map((friend) => {
+              const live = liveFriends.find((presence) => presence.uid === friend.uid)
+              return (
+                <div key={friend.uid} className="card">
+                  <div className="row row--between">
+                    <div className="row">
+                      <Avatar url={friend.photoURL} name={friend.displayName} live={Boolean(live)} />
+                      <div>
+                        <p style={{ fontWeight: 700 }}>{friend.displayName ?? 'Ciclista'}</p>
+                        <p className="text-dim" style={{ fontSize: '0.75rem' }}>
+                          {live
+                            ? `En ruta · ${formatDistance(live.distance, settings.distanceUnit)}`
+                            : `Amigos desde ${new Date(friend.since).toLocaleDateString('es-ES')}`}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn--sm btn--ghost text-danger"
+                      onClick={() => setPendingRemoval(friend)}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <Notice tone="info" icon="🔒">
+        Nadie puede ver tu ubicación sin ser tu amigo, y solo mientras compartes durante una
+        carrera. Al terminar, la posición se borra de la nube. Tus carreras guardadas siguen siendo
+        privadas: los amigos no las ven. <Link to="/settings">Ajustes de privacidad</Link>
+      </Notice>
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        title={`¿Quitar a ${pendingRemoval?.displayName ?? 'este amigo'}?`}
+        message="Dejaréis de ver vuestra ubicación en vivo mutuamente."
+        confirmLabel="Quitar"
+        tone="danger"
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => {
+          if (pendingRemoval) void remove(pendingRemoval.uid)
+          setPendingRemoval(null)
+        }}
+      />
+    </>
+  )
+}
+
+function LiveFriendRow({
+  presence,
+  settings,
+}: {
+  presence: LivePresence
+  settings: { speedUnit: 'kmh' | 'mph'; distanceUnit: 'km' | 'mi' }
+}) {
+  return (
+    <div className="card card--flat">
+      <div className="row row--between">
+        <div className="row">
+          <Avatar url={presence.photoURL} name={presence.displayName} live />
+          <div>
+            <p style={{ fontWeight: 700 }}>{presence.displayName ?? 'Ciclista'}</p>
+            <p className="text-dim" style={{ fontSize: '0.75rem' }}>
+              {presence.status === 'paused' ? 'En pausa' : 'Pedaleando'} ·{' '}
+              {formatRelative(presence.updatedAt)}
+            </p>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <p className="numeric" style={{ fontWeight: 750 }}>
+            {formatSpeedWithUnit(presence.speed, settings.speedUnit)}
+          </p>
+          <p className="text-dim numeric" style={{ fontSize: '0.75rem' }}>
+            {formatDistance(presence.distance, settings.distanceUnit)}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Avatar({
+  url,
+  name,
+  live,
+}: {
+  url: string | null
+  name: string | null
+  live?: boolean
+}) {
+  const initials = (name ?? 'C')
+    .split(' ')
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('')
+  return (
+    <span className={`avatar-wrap ${live ? 'is-live' : ''}`}>
+      {url ? (
+        <img className="avatar" src={url} alt="" referrerPolicy="no-referrer" />
+      ) : (
+        <span className="avatar avatar--initials">{initials}</span>
+      )}
+    </span>
+  )
+}

@@ -1,0 +1,518 @@
+/* Panel de inicio, navegacion por fichas y piezas sociales ------------------- */
+
+/* Cabecera con la llamada a la accion */
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+  margin-bottom: var(--gap-4);
+}
+
+.hero__title {
+  font-size: 1.55rem;
+  font-weight: 850;
+  letter-spacing: -0.03em;
+}
+
+.hero__subtitle {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin-top: 4px;
+}
+
+/* Rejilla de tarjetas ------------------------------------------------------- */
+
+.bento {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap-3);
+  align-content: start;
+}
+
+.bento__card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--gap-3);
+  min-height: 130px;
+  padding: var(--gap-4);
+  border-radius: 20px;
+  background: var(--bento-surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  overflow: hidden;
+  transition: transform 0.15s ease;
+}
+
+a.bento__card:active {
+  transform: scale(0.985);
+}
+
+.bento__card--wide {
+  grid-column: span 2;
+}
+
+.bento__card--tall {
+  grid-row: span 2;
+}
+
+.bento__card--route {
+  background: linear-gradient(155deg, #1d2836, var(--bento-surface));
+}
+
+.bento__card--yellow {
+  background: var(--bento-yellow);
+  color: var(--bento-ink);
+  border-color: transparent;
+}
+
+.bento__card--salmon {
+  background: var(--bento-salmon);
+  color: var(--bento-ink);
+  border-color: transparent;
+}
+
+.bento__card--green {
+  background: var(--bento-green);
+  color: var(--bento-ink);
+  border-color: transparent;
+}
+
+.bento__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap-2);
+}
+
+.bento__title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.bento__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.bento__metric {
+  font-size: 1.9rem;
+  font-weight: 850;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.bento__unit {
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+.bento__hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.bento__hint--dark {
+  color: inherit;
+  opacity: 0.65;
+}
+
+.bento__badge {
+  font-size: 1.1rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  flex: none;
+}
+
+.bento__route {
+  flex: 1;
+  min-height: 130px;
+  display: grid;
+  place-items: center;
+}
+
+.bento__pills {
+  display: flex;
+  gap: var(--gap-2);
+  flex-wrap: wrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 0.85rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--bento-ink);
+}
+
+.pill--blue {
+  background: var(--bento-blue);
+}
+
+.pill--green {
+  background: var(--bento-green);
+}
+
+.speed-route {
+  width: 100%;
+  height: auto;
+  max-height: 170px;
+}
+
+.route-empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.speed-legend {
+  display: flex;
+  gap: var(--gap-3);
+  flex-wrap: wrap;
+}
+
+.speed-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.speed-legend__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* Grafico de velocidad media diaria */
+.mini-chart {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.mini-chart__value {
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--bento-ink);
+}
+
+.mini-chart__axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6rem;
+  font-weight: 600;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+/* Rejilla de dias del mes */
+.dot-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+.dot-grid__dot {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--surface-3);
+}
+
+.dot-grid__dot.is-single {
+  background: var(--bento-red);
+}
+
+.dot-grid__dot.is-multi {
+  background: var(--bento-yellow);
+}
+
+/* Columnas de minutos */
+.minutes-chart {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap-2);
+  align-items: end;
+  height: 128px;
+}
+
+.minutes-chart__column {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 6px;
+}
+
+.minutes-chart__range {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.minutes-chart__bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 8px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  font-size: 0.82rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.minutes-chart__bar.is-current {
+  background: var(--bento-green);
+  color: var(--bento-ink);
+}
+
+/* Ilustracion del medio de transporte */
+.bike-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 96px;
+}
+
+.bike-art svg {
+  width: 100%;
+  max-width: 170px;
+  opacity: 0.9;
+}
+
+.bike-art__icon {
+  position: absolute;
+  right: 0;
+  top: 0;
+  font-size: 1.3rem;
+}
+
+/* Navegacion inferior por fichas ------------------------------------------- */
+
+.bottom-nav__item {
+  margin: 8px 5px calc(8px + var(--safe-bottom) * 0);
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.bottom-nav__item.is-active {
+  color: var(--bento-ink);
+}
+
+.bottom-nav__item--home.is-active {
+  background: var(--bento-green);
+}
+
+.bottom-nav__item--history.is-active {
+  background: var(--bento-blue);
+}
+
+.bottom-nav__item--record.is-active {
+  background: var(--accent);
+}
+
+.bottom-nav__item--friends.is-active {
+  background: var(--bento-salmon);
+}
+
+.bottom-nav__item--settings.is-active {
+  background: var(--bento-yellow);
+}
+
+/* Medio de transporte ------------------------------------------------------- */
+
+.activity-chips {
+  display: flex;
+  gap: var(--gap-2);
+  overflow-x: auto;
+  padding-bottom: var(--gap-2);
+  scrollbar-width: none;
+}
+
+.activity-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.activity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.activity-chip.is-active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: transparent;
+}
+
+.activity-chip__icon {
+  font-size: 1rem;
+}
+
+.badge--activity {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.activity-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap-2);
+}
+
+.activity-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: var(--gap-3) 4px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 0.62rem;
+  font-weight: 650;
+  color: var(--text-muted);
+  line-height: 1.2;
+  text-align: center;
+}
+
+.activity-tile.is-active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: transparent;
+}
+
+.activity-tile__icon {
+  font-size: 1.5rem;
+}
+
+/* Amigos -------------------------------------------------------------------- */
+
+.friend-code {
+  font-size: 1.9rem;
+  font-weight: 850;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+}
+
+.avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.avatar--initials {
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.avatar-wrap.is-live::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+}
+
+.map--live {
+  height: 240px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+/* Marcador de amigo sobre el mapa */
+.friend-marker {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--bento-blue);
+  border: 2px solid #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.friend-marker.is-paused {
+  background: var(--warn);
+}
+
+.friend-marker img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.friend-marker__label {
+  position: absolute;
+  top: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: rgba(10, 14, 20, 0.82);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (min-width: 720px) {
+  .bento {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .bento__card--wide {
+    grid-column: span 2;
+  }
+  .hero {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .hero .btn--hero {
+    width: auto;
+    min-width: 300px;
+  }
+}
