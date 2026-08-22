@@ -13,6 +13,7 @@ import { RecordsPage } from '@/pages/RecordsPage'
 import { RidePage } from '@/pages/RidePage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { Spinner } from '@/components/ui'
+import { rideEngine } from '@/services/rideEngine'
 import { applyTheme } from '@/services/settingsService'
 import { startSyncWatcher } from '@/services/syncService'
 
@@ -70,12 +71,24 @@ export default function App() {
   )
 }
 
-/** Aviso de nueva version disponible; nunca se recarga a mitad de una carrera. */
+/**
+ * Actualizacion de la aplicacion.
+ *
+ * Si no hay una carrera en curso se aplica sola: obligar al usuario a aceptar
+ * un aviso deja telefonos ejecutando mezclas de codigo nuevo con estilos
+ * antiguos servidos por el service worker, que es dificil de diagnosticar. Con
+ * una carrera abierta no se recarga jamas sin permiso: la recarga interrumpiria
+ * el registro.
+ */
 function UpdatePrompt() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({ immediate: true })
+
+  useEffect(() => {
+    if (needRefresh && !rideEngine.isActive()) void updateServiceWorker(true)
+  }, [needRefresh, updateServiceWorker])
 
   if (!needRefresh) return null
 
@@ -92,7 +105,7 @@ function UpdatePrompt() {
       }}
     >
       <span className="notice__icon">⬆️</span>
-      <div style={{ flex: 1 }}>Hay una versión nueva de CYCLERUN.</div>
+      <div style={{ flex: 1 }}>Hay una versión nueva. Se aplicará al terminar la carrera.</div>
       <div className="row" style={{ gap: 'var(--gap-2)' }}>
         <button type="button" className="btn btn--sm" onClick={() => setNeedRefresh(false)}>
           Ahora no
