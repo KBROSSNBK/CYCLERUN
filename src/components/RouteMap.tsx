@@ -4,7 +4,9 @@ import 'leaflet/dist/leaflet.css'
 import { MAP_FALLBACK_CENTER } from '@/config/defaults'
 import { gpsService } from '@/gps/gpsService'
 import { rideEngine } from '@/services/rideEngine'
+import { getSettings } from '@/services/settingsService'
 import type { LivePresence, RoutePoint } from '@/types'
+import { formatDistance } from '@/utils/format'
 import { boundsOf, splitSegments, type LatLng } from '@/utils/geo'
 
 /**
@@ -65,7 +67,13 @@ function endpointIcon(color: string): L.DivIcon {
   })
 }
 
-/** Marcador de un amigo: foto o iniciales, nombre y estado. */
+/**
+ * Marcador de un amigo: foto pequena con su nombre y, si esta pedaleando, la
+ * distancia que lleva. La foto se mantiene discreta a proposito para que no
+ * tape el recorrido cuando varios amigos coinciden en la misma calle.
+ */
+const FRIEND_MARKER_SIZE = 26
+
 function friendIcon(presence: LivePresence): L.DivIcon {
   const name = presence.displayName ?? 'Amigo'
   const initials = name
@@ -82,13 +90,21 @@ function friendIcon(presence: LivePresence): L.DivIcon {
       : presence.status === 'recording'
         ? ' is-riding'
         : ''
+
+  // La unidad se lee del ajuste del usuario que mira el mapa, no del emisor.
+  const distance =
+    presence.distance > 0
+      ? `<em>${escapeHtml(formatDistance(presence.distance, getSettings().distanceUnit))}</em>`
+      : ''
+
   return L.divIcon({
     className: '',
     html:
       `<div class="friend-marker${modifier}">${avatar}` +
-      `<span class="friend-marker__label">${escapeHtml(name.split(' ')[0])}</span></div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+      `<span class="friend-marker__label"><b>${escapeHtml(name.split(' ')[0])}</b>${distance}</span>` +
+      `</div>`,
+    iconSize: [FRIEND_MARKER_SIZE, FRIEND_MARKER_SIZE],
+    iconAnchor: [FRIEND_MARKER_SIZE / 2, FRIEND_MARKER_SIZE / 2],
   })
 }
 
