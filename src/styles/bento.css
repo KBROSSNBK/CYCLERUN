@@ -478,6 +478,13 @@ a.bento__card:active {
   background: var(--warn);
 }
 
+/* Pedaleando ahora mismo; sin este modificador el marcador es el azul de
+   «tiene la app abierta pero no ha empezado». */
+.friend-marker.is-riding {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
 .friend-marker img {
   width: 100%;
   height: 100%;

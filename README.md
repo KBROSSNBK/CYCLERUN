@@ -275,9 +275,16 @@ icono propio, y funciona sin conexión.
 4. La otra persona recibe una solicitud y debe **aceptarla**.
 5. Activa **Compartir ubicación en vivo** (está desactivada por defecto).
 
-Mientras grabas una carrera, tus amigos te ven moverse por el mapa —en la
-pantalla de Amigos y en el mapa de su propia carrera— con tu velocidad y tu
-distancia. Al finalizar, tu posición se **borra** de la nube.
+Os veis en dos situaciones:
+
+- **Con la pantalla de Amigos abierta**, aunque nadie esté pedaleando. Es lo
+  que permite quedar y veros llegar.
+- **Mientras alguien graba una carrera**, con su velocidad y su distancia, tanto
+  en la pantalla de Amigos como en el mapa de tu propia carrera.
+
+El marcador es verde si esa persona está pedaleando, ámbar si está en pausa y
+azul si solo tiene la app abierta. Al salir de la pantalla o terminar la
+carrera, tu posición se **borra** de la nube.
 
 Qué **no** ocurre nunca:
 

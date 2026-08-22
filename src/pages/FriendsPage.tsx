@@ -4,7 +4,7 @@ import { FriendsMap } from '@/components/RouteMap'
 import { ConfirmDialog, EmptyState, Notice, Spinner, Switch } from '@/components/ui'
 import { firebaseEnabled } from '@/firebase/app'
 import { useAuth } from '@/hooks/useAuth'
-import { useFriends } from '@/hooks/useFriends'
+import { useFriends, useLiveShare } from '@/hooks/useFriends'
 import { useSettings } from '@/hooks/useSettings'
 import type { Friend, LivePresence } from '@/types'
 import { formatDistance, formatRelative, formatSpeedWithUnit } from '@/utils/format'
@@ -19,8 +19,21 @@ import { formatDistance, formatRelative, formatSpeedWithUnit } from '@/utils/for
 export function FriendsPage() {
   const { user, mode, signIn } = useAuth()
   const { settings, update } = useSettings()
-  const { friends, requests, liveFriends, friendCode, loading, addFriend, accept, reject, remove } =
-    useFriends()
+  const {
+    friends,
+    requests,
+    liveFriends,
+    friendCode,
+    loading,
+    liveError,
+    addFriend,
+    accept,
+    reject,
+    remove,
+  } = useFriends()
+  // Mientras esta pantalla esté abierta se publica la posición, aunque no haya
+  // carrera: es lo que permite veros en el mapa a la vez sin salir a pedalear.
+  const live = useLiveShare(true)
 
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState<{ tone: 'info' | 'danger'; text: string } | null>(null)
@@ -55,8 +68,8 @@ export function FriendsPage() {
         />
         {mode === 'anonymous' && (
           <Notice tone="info" icon="🔒">
-            Tu ubicación solo se comparte con quien aceptes como amigo, y solo mientras tengas una
-            carrera en curso con la opción activada.
+            Tu ubicación solo se comparte con quien aceptes como amigo, y solo mientras tengas
+            abierta la pantalla de amigos o estés grabando una carrera, con la opción activada.
           </Notice>
         )}
       </>
@@ -100,17 +113,37 @@ export function FriendsPage() {
         </div>
       </div>
 
-      {liveFriends.length > 0 && (
+      {friends.length > 0 && (
         <section className="section" style={{ marginTop: 0 }}>
           <h2 className="section__title">
             <span className="dot dot--pulse" style={{ color: 'var(--accent)' }} /> En vivo
           </h2>
-          <FriendsMap presences={liveFriends} className="map map--live" />
-          <div className="stack" style={{ marginTop: 'var(--gap-3)' }}>
-            {liveFriends.map((presence) => (
-              <LiveFriendRow key={presence.uid} presence={presence} settings={settings} />
-            ))}
-          </div>
+          {liveFriends.length > 0 ? (
+            <>
+              <FriendsMap presences={liveFriends} className="map map--live" />
+              <div className="stack" style={{ marginTop: 'var(--gap-3)' }}>
+                {liveFriends.map((presence) => (
+                  <LiveFriendRow key={presence.uid} presence={presence} settings={settings} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="card center text-muted" style={{ padding: 'var(--gap-5)' }}>
+              <p style={{ fontSize: '2rem' }}>🗺️</p>
+              <p style={{ marginTop: 'var(--gap-2)', fontSize: '0.9rem' }}>
+                Ninguno de tus amigos está compartiendo su posición ahora mismo.
+              </p>
+              <p className="field__hint" style={{ marginTop: 'var(--gap-2)' }}>
+                Aparecen aquí cuando abren esta pantalla o cuando graban una carrera, siempre con
+                el interruptor de abajo activado.
+              </p>
+            </div>
+          )}
+          {liveError && (
+            <Notice tone="danger" icon="⚠️">
+              No se ha podido escuchar a tus amigos: {liveError}
+            </Notice>
+          )}
         </section>
       )}
 
@@ -122,8 +155,8 @@ export function FriendsPage() {
               <div>
                 <p className="field__label">Ubicación en vivo</p>
                 <p className="field__hint">
-                  Mientras grabas una carrera, tus amigos verán dónde estás. Se deja de compartir
-                  al finalizar.
+                  Tus amigos te ven mientras tengas esta pantalla abierta o estés grabando una
+                  carrera. Al salir, tu posición se borra de la nube.
                 </p>
               </div>
               <Switch
@@ -133,10 +166,25 @@ export function FriendsPage() {
               />
             </div>
           </div>
-          {settings.shareLiveLocation && friends.length === 0 && (
-            <p className="field__hint" style={{ marginTop: 'var(--gap-3)' }}>
-              Todavía no tienes amigos, así que no se está compartiendo nada.
-            </p>
+
+          {settings.shareLiveLocation && (
+            <div style={{ marginTop: 'var(--gap-4)' }}>
+              {live.sharing ? (
+                <div className="badge badge--ok">
+                  <span className="dot dot--pulse" aria-hidden />
+                  Visible para {friends.length} {friends.length === 1 ? 'amigo' : 'amigos'}
+                  {live.lastPublishAt && ` · ${formatRelative(live.lastPublishAt)}`}
+                </div>
+              ) : (
+                <div className="badge badge--warn">⏳ {live.blockedBy ?? 'Preparando…'}</div>
+              )}
+            </div>
+          )}
+
+          {live.lastError && (
+            <Notice tone="danger" icon="⚠️">
+              No se ha podido publicar tu posición: {live.lastError}
+            </Notice>
           )}
         </div>
       </section>
@@ -312,7 +360,12 @@ function LiveFriendRow({
           <div>
             <p style={{ fontWeight: 700 }}>{presence.displayName ?? 'Ciclista'}</p>
             <p className="text-dim" style={{ fontSize: '0.75rem' }}>
-              {presence.status === 'paused' ? 'En pausa' : 'Pedaleando'} ·{' '}
+              {presence.status === 'paused'
+                ? 'En pausa'
+                : presence.status === 'recording'
+                  ? 'Pedaleando'
+                  : 'Con la app abierta'}{' '}
+              ·{' '}
               {formatRelative(presence.updatedAt)}
             </p>
           </div>

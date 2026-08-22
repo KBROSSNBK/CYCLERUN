@@ -76,11 +76,16 @@ function friendIcon(presence: LivePresence): L.DivIcon {
   const avatar = presence.photoURL
     ? `<img src="${escapeHtml(presence.photoURL)}" alt="" referrerpolicy="no-referrer" />`
     : `<span>${escapeHtml(initials)}</span>`
-  const paused = presence.status === 'paused' ? ' is-paused' : ''
+  const modifier =
+    presence.status === 'paused'
+      ? ' is-paused'
+      : presence.status === 'recording'
+        ? ' is-riding'
+        : ''
   return L.divIcon({
     className: '',
     html:
-      `<div class="friend-marker${paused}">${avatar}` +
+      `<div class="friend-marker${modifier}">${avatar}` +
       `<span class="friend-marker__label">${escapeHtml(name.split(' ')[0])}</span></div>`,
     iconSize: [34, 34],
     iconAnchor: [17, 17],

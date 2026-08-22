@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react'
 import { firebaseEnabled } from '@/firebase/app'
@@ -20,8 +21,8 @@ import {
   watchFriendRequests,
   watchFriends,
 } from '@/firebase/friends'
-import { watchFriendsLive } from '@/firebase/live'
-import { liveShareService } from '@/services/liveShareService'
+import { isStale, watchFriendsLive } from '@/firebase/live'
+import { liveShareService, type LiveShareState } from '@/services/liveShareService'
 import type { Friend, FriendRequest, LivePresence } from '@/types'
 import { useAuth } from './useAuth'
 import { useSettings } from './useSettings'
@@ -41,6 +42,8 @@ interface FriendsContextValue {
   friendCode: string | null
   loading: boolean
   error: string | null
+  /** fallo de la escucha en tiempo real (reglas, red…) */
+  liveError: string | null
   /** Envia una solicitud a partir de un codigo de amistad o de un correo. */
   addFriend: (query: string) => Promise<string>
   accept: (request: FriendRequest) => Promise<void>
@@ -59,6 +62,7 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
   const [friendCode, setFriendCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [liveError, setLiveError] = useState<string | null>(null)
 
   const uid = user?.uid ?? null
 
@@ -80,7 +84,14 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
 
     const unsubFriends = watchFriends(user.uid, setFriends)
     const unsubRequests = watchFriendRequests(user.uid, setRequests)
-    const unsubLive = watchFriendsLive(user.uid, setLiveFriends)
+    const unsubLive = watchFriendsLive(
+      user.uid,
+      (presences) => {
+        setLiveFriends(presences)
+        setLiveError(null)
+      },
+      (err) => setLiveError(err.message),
+    )
 
     return () => {
       unsubFriends()
@@ -93,9 +104,7 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (liveFriends.length === 0) return
     const timer = setInterval(() => {
-      setLiveFriends((current) =>
-        current.filter((presence) => Date.now() - presence.updatedAt < 90000),
-      )
+      setLiveFriends((current) => current.filter((presence) => !isStale(presence)))
     }, 15000)
     return () => clearInterval(timer)
   }, [liveFriends.length])
@@ -168,12 +177,13 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
       friendCode,
       loading,
       error,
+      liveError,
       addFriend,
       accept,
       reject,
       remove,
     }),
-    [friends, requests, liveFriends, friendCode, loading, error, addFriend, accept, reject, remove],
+    [friends, requests, liveFriends, friendCode, loading, error, liveError, addFriend, accept, reject, remove],
   )
 
   return <FriendsContext.Provider value={value}>{children}</FriendsContext.Provider>
@@ -183,4 +193,28 @@ export function useFriends(): FriendsContextValue {
   const context = useContext(FriendsContext)
   if (!context) throw new Error('useFriends debe usarse dentro de <FriendsProvider>')
   return context
+}
+
+/**
+ * Estado de la publicacion de la propia posicion, y activacion mientras la
+ * pantalla de amigos esta abierta.
+ */
+export function useLiveShare(visible: boolean): LiveShareState {
+  useEffect(() => {
+    liveShareService.setVisible(visible)
+    if (!visible) return
+    // Al cerrar la pantalla (o la pestana) se retira la posicion publicada.
+    const hide = () => liveShareService.setVisible(false)
+    window.addEventListener('pagehide', hide)
+    return () => {
+      window.removeEventListener('pagehide', hide)
+      liveShareService.setVisible(false)
+    }
+  }, [visible])
+
+  return useSyncExternalStore(
+    liveShareService.subscribe,
+    liveShareService.getSnapshot,
+    liveShareService.getSnapshot,
+  )
 }

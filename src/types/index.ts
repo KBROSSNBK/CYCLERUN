@@ -212,8 +212,12 @@ export interface LivePresence extends PublicProfile {
   heading: number | null
   /** metros recorridos en la carrera en curso */
   distance: number
-  status: 'recording' | 'paused'
+  /** 'online' = app abierta compartiendo, sin carrera en curso */
+  status: 'recording' | 'paused' | 'online'
   rideId: string | null
+  /** marca de tiempo del emisor (su reloj) */
   updatedAt: number
   visibleTo: string[]
+  /** momento en que este dispositivo recibio el dato; lo anade el lector */
+  receivedAt?: number
 }

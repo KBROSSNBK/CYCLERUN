@@ -12,14 +12,16 @@ import type { LivePresence } from '@/types'
  * modo que la ubicacion nunca es publica y deja de serlo en cuanto se deshace
  * la amistad o se desactiva el compartir.
  *
- * Se escribe un unico documento por usuario (no un historial): al terminar la
- * carrera se borra y no queda rastro de la posicion en la nube.
+ * Se escribe un unico documento por usuario (no un historial): al dejar de
+ * compartir se borra y no queda rastro de la posicion en la nube.
  */
 
 /** Se considera desconectado a quien lleve mas de este tiempo sin actualizar. */
 export const STALE_AFTER_MS = 90000
 
-export type LiveUpdate = Omit<LivePresence, 'visibleTo'> & { visibleTo: string[] }
+export type LiveUpdate = Omit<LivePresence, 'visibleTo' | 'receivedAt'> & {
+  visibleTo: string[]
+}
 
 export async function publishPresence(presence: LiveUpdate): Promise<void> {
   await setDoc(doc(getDb(), 'liveLocations', presence.uid), presence)
@@ -32,10 +34,16 @@ export async function clearPresence(uid: string): Promise<void> {
 /**
  * Escucha en tiempo real la posicion de los amigos que estan compartiendo.
  * La consulta filtra por `visibleTo`, que es justo lo que autorizan las reglas.
+ *
+ * La caducidad se mide con `receivedAt` —el momento en que ESTE dispositivo
+ * recibio el dato— y no con la marca de tiempo que escribio el emisor: si los
+ * relojes de los dos telefonos no coinciden, comparar marcas ajenas haria
+ * desaparecer del mapa a un amigo que esta perfectamente conectado.
  */
 export function watchFriendsLive(
   uid: string,
   onChange: (presences: LivePresence[]) => void,
+  onError?: (error: Error) => void,
 ): () => void {
   const liveQuery = query(
     collection(getDb(), 'liveLocations'),
@@ -44,17 +52,22 @@ export function watchFriendsLive(
   return onSnapshot(
     liveQuery,
     (snapshot) => {
-      const now = Date.now()
+      const receivedAt = Date.now()
       const presences = snapshot.docs
-        .map((snap) => snap.data() as LivePresence)
-        .filter((presence) => now - presence.updatedAt < STALE_AFTER_MS)
+        .map((snap) => ({ ...(snap.data() as LivePresence), receivedAt }))
         .sort((a, b) => b.updatedAt - a.updatedAt)
       onChange(presences)
     },
-    () => onChange([]),
+    (error) => {
+      // Silenciar el error dejaria un mapa vacio sin explicacion, que es
+      // exactamente lo que no queremos: se propaga a la interfaz.
+      onError?.(error as Error)
+      onChange([])
+    },
   )
 }
 
 export function isStale(presence: LivePresence, now = Date.now()): boolean {
-  return now - presence.updatedAt >= STALE_AFTER_MS
+  const reference = presence.receivedAt ?? presence.updatedAt
+  return now - reference >= STALE_AFTER_MS
 }
