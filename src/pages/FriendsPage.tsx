@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FriendsMap } from '@/components/RouteMap'
+import { FriendsMap, type MapFocus } from '@/components/RouteMap'
 import { ConfirmDialog, EmptyState, Notice, Spinner, Switch } from '@/components/ui'
 import { firebaseEnabled } from '@/firebase/app'
+import { presenceAge } from '@/firebase/live'
 import { useAuth } from '@/hooks/useAuth'
 import { useFriends, useLiveShareState } from '@/hooks/useFriends'
 import { useSettings } from '@/hooks/useSettings'
@@ -40,6 +41,20 @@ export function FriendsPage() {
   const [message, setMessage] = useState<{ tone: 'info' | 'danger'; text: string } | null>(null)
   const [sending, setSending] = useState(false)
   const [pendingRemoval, setPendingRemoval] = useState<Friend | null>(null)
+  const [focus, setFocus] = useState<MapFocus | null>(null)
+  const mapRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * Al tocar a un amigo el mapa se encuadra entre su posición y la mía, y sube
+   * hasta el mapa si se ha pulsado desde la lista de abajo.
+   *
+   * Va antes de las salidas condicionales de abajo: declararlo después
+   * cambiaría el número de hooks entre renders y React abortaría el árbol.
+   */
+  const focusFriend = useCallback((friendUid: string) => {
+    setFocus({ uid: friendUid, nonce: Date.now() })
+    mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [])
 
   if (!firebaseEnabled) {
     return (
@@ -121,10 +136,28 @@ export function FriendsPage() {
           </h2>
           {liveFriends.length > 0 ? (
             <>
-              <FriendsMap presences={liveFriends} className="map map--live" />
+              <div ref={mapRef}>
+                <FriendsMap
+                  presences={liveFriends}
+                  className="map map--live"
+                  focus={focus}
+                  onFocusLost={() => setFocus(null)}
+                />
+              </div>
+              <p className="field__hint" style={{ marginTop: 'var(--gap-2)' }}>
+                {focus
+                  ? 'Siguiendo a tu amigo. Arrastra el mapa para dejar de seguirlo.'
+                  : 'Toca a un amigo para veros a los dos en el mapa.'}
+              </p>
               <div className="stack" style={{ marginTop: 'var(--gap-3)' }}>
                 {liveFriends.map((presence) => (
-                  <LiveFriendRow key={presence.uid} presence={presence} settings={settings} />
+                  <LiveFriendRow
+                    key={presence.uid}
+                    presence={presence}
+                    settings={settings}
+                    selected={focus?.uid === presence.uid}
+                    onSelect={() => focusFriend(presence.uid)}
+                  />
                 ))}
               </div>
             </>
@@ -298,7 +331,16 @@ export function FriendsPage() {
               return (
                 <div key={friend.uid} className="card">
                   <div className="row row--between">
-                    <div className="row">
+                    <div
+                      className="row"
+                      role={live ? 'button' : undefined}
+                      tabIndex={live ? 0 : undefined}
+                      style={live ? { cursor: 'pointer' } : undefined}
+                      onClick={() => live && focusFriend(friend.uid)}
+                      onKeyDown={(event) => {
+                        if (live && (event.key === 'Enter' || event.key === ' ')) focusFriend(friend.uid)
+                      }}
+                    >
                       <Avatar url={friend.photoURL} name={friend.displayName} live={Boolean(live)} />
                       <div>
                         <p style={{ fontWeight: 700 }}>{friend.displayName ?? 'Ciclista'}</p>
@@ -372,16 +414,29 @@ export function FriendsPage() {
 function LiveFriendRow({
   presence,
   settings,
+  selected,
+  onSelect,
 }: {
   presence: LivePresence
   settings: { speedUnit: 'kmh' | 'mph'; distanceUnit: 'km' | 'mi' }
+  selected: boolean
+  onSelect: () => void
 }) {
+  // La antigüedad se calcula con el criterio que menos penalice al emisor, para
+  // no acusar de «desconectado» a quien solo tiene el reloj desajustado.
+  const age = presenceAge(presence)
+  const riding = presence.status === 'recording' || presence.status === 'paused'
+
   return (
-    <div className="card card--flat">
+    <button
+      type="button"
+      className={`card card--flat friend-row ${selected ? 'is-selected' : ''}`}
+      onClick={onSelect}
+    >
       <div className="row row--between">
         <div className="row">
           <Avatar url={presence.photoURL} name={presence.displayName} live />
-          <div>
+          <div style={{ textAlign: 'left' }}>
             <p style={{ fontWeight: 700 }}>{presence.displayName ?? 'Ciclista'}</p>
             <p className="text-dim" style={{ fontSize: '0.75rem' }}>
               {presence.status === 'paused'
@@ -389,8 +444,7 @@ function LiveFriendRow({
                 : presence.status === 'recording'
                   ? 'Pedaleando'
                   : 'Con la app abierta'}{' '}
-              ·{' '}
-              {formatRelative(presence.updatedAt)}
+              · {age < 30000 ? 'ahora mismo' : formatRelative(Date.now() - age)}
             </p>
           </div>
         </div>
@@ -398,12 +452,14 @@ function LiveFriendRow({
           <p className="numeric" style={{ fontWeight: 750 }}>
             {formatSpeedWithUnit(presence.speed, settings.speedUnit)}
           </p>
-          <p className="text-dim numeric" style={{ fontSize: '0.75rem' }}>
-            {formatDistance(presence.distance, settings.distanceUnit)}
-          </p>
+          {riding && (
+            <p className="text-dim numeric" style={{ fontSize: '0.75rem' }}>
+              {formatDistance(presence.distance, settings.distanceUnit)}
+            </p>
+          )}
         </div>
       </div>
-    </div>
+    </button>
   )
 }
 

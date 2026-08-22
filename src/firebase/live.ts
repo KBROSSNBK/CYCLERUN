@@ -35,10 +35,16 @@ export async function clearPresence(uid: string): Promise<void> {
  * Escucha en tiempo real la posicion de los amigos que estan compartiendo.
  * La consulta filtra por `visibleTo`, que es justo lo que autorizan las reglas.
  *
- * La caducidad se mide con `receivedAt` —el momento en que ESTE dispositivo
- * recibio el dato— y no con la marca de tiempo que escribio el emisor: si los
- * relojes de los dos telefonos no coinciden, comparar marcas ajenas haria
- * desaparecer del mapa a un amigo que esta perfectamente conectado.
+ * Caducidad
+ * ---------
+ * Se combinan dos criterios porque ninguno basta por separado:
+ *
+ *  - la marca del emisor (`updatedAt`), que falla si los dos telefonos tienen
+ *    los relojes desincronizados;
+ *  - el momento en que ESTE dispositivo vio **cambiar** el documento, que solo
+ *    se anota cuando `updatedAt` cambia de verdad. Anotarlo en cada snapshot
+ *    haria pasar por reciente un documento de hace una hora, que es justo lo
+ *    que ocurre cuando a un amigo se le bloquea el telefono y deja de emitir.
  */
 export function watchFriendsLive(
   uid: string,
@@ -49,14 +55,31 @@ export function watchFriendsLive(
     collection(getDb(), 'liveLocations'),
     where('visibleTo', 'array-contains', uid),
   )
+
+  // uid del amigo -> { ultima marca vista, cuando la vimos cambiar }
+  const seen = new Map<string, { updatedAt: number; changedAt: number }>()
+
   return onSnapshot(
     liveQuery,
     (snapshot) => {
-      const receivedAt = Date.now()
-      const presences = snapshot.docs
-        .map((snap) => ({ ...(snap.data() as LivePresence), receivedAt }))
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-      onChange(presences)
+      const now = Date.now()
+      const presences = snapshot.docs.map((snap) => {
+        const presence = snap.data() as LivePresence
+        const previous = seen.get(presence.uid)
+        if (!previous || previous.updatedAt !== presence.updatedAt) {
+          seen.set(presence.uid, { updatedAt: presence.updatedAt, changedAt: now })
+        }
+        // En la primera aparicion todavia no hay ningun cambio observado, de
+        // modo que manda la marca del emisor.
+        const changedAt = previous ? (seen.get(presence.uid) as { changedAt: number }).changedAt : null
+        return { ...presence, receivedAt: changedAt ?? undefined }
+      })
+
+      for (const uidSeen of [...seen.keys()]) {
+        if (!snapshot.docs.some((snap) => snap.id === uidSeen)) seen.delete(uidSeen)
+      }
+
+      onChange(presences.sort((a, b) => b.updatedAt - a.updatedAt))
     },
     (error) => {
       // Silenciar el error dejaria un mapa vacio sin explicacion, que es
@@ -67,7 +90,20 @@ export function watchFriendsLive(
   )
 }
 
+/**
+ * Se considera caducada una posicion que ni es reciente segun el reloj de quien
+ * la emitio, ni se ha visto cambiar en este dispositivo. Basta con que se
+ * cumpla una de las dos para seguir mostrandola.
+ */
 export function isStale(presence: LivePresence, now = Date.now()): boolean {
-  const reference = presence.receivedAt ?? presence.updatedAt
-  return now - reference >= STALE_AFTER_MS
+  if (now - presence.updatedAt < STALE_AFTER_MS) return false
+  if (presence.receivedAt !== undefined && now - presence.receivedAt < STALE_AFTER_MS) return false
+  return true
+}
+
+/** Antigüedad real del dato, para poder avisar en la interfaz. */
+export function presenceAge(presence: LivePresence, now = Date.now()): number {
+  const byClock = now - presence.updatedAt
+  const bySighting = presence.receivedAt !== undefined ? now - presence.receivedAt : byClock
+  return Math.max(0, Math.min(byClock, bySighting))
 }

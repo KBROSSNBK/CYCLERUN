@@ -90,7 +90,9 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
     const unsubLive = watchFriendsLive(
       user.uid,
       (presences) => {
-        setLiveFriends(presences)
+        // Se filtra ya en la llegada: un documento que lleva media hora sin
+        // cambiar (telefono bloqueado) no debe aparecer como si fuera actual.
+        setLiveFriends(presences.filter((presence) => !isStale(presence)))
         setLiveError(null)
       },
       (err) => setLiveError(err.message),

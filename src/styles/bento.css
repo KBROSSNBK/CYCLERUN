@@ -540,3 +540,18 @@ a.bento__card:active {
     min-width: 300px;
   }
 }
+
+/* Fila de amigo en vivo: es un boton que centra el mapa entre los dos. */
+.friend-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.friend-row.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}

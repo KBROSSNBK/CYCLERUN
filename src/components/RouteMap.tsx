@@ -502,32 +502,81 @@ export function RouteThumbnail({
   )
 }
 
+/** Amigo sobre el que centrar el mapa; el contador permite repetir el mismo. */
+export interface MapFocus {
+  uid: string
+  nonce: number
+}
+
 /**
- * Mapa dedicado a los amigos que estan pedaleando ahora mismo.
- * Encuadra automaticamente a todos los que estan emitiendo.
+ * Mapa de los amigos que estan compartiendo ahora mismo.
+ *
+ * Muestra tambien la posicion propia, de modo que al elegir a un amigo el
+ * encuadre incluye a los dos y se ve de un vistazo lo lejos que esta.
  */
 export function FriendsMap({
   presences,
   className,
+  focus,
+  onFocusLost,
 }: {
   presences: LivePresence[]
   className?: string
+  focus?: MapFocus | null
+  /** el usuario ha arrastrado el mapa: deja de seguir al amigo elegido */
+  onFocusLost?: () => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markers = useRef(new Map<string, FriendLayer>())
+  const selfMarker = useRef<L.Marker | null>(null)
   const fitted = useRef(false)
+  const presencesRef = useRef(presences)
+  const following = useRef(false)
+
+  presencesRef.current = presences
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
-    mapRef.current = createMap(containerRef.current)
+    const map = createMap(containerRef.current)
+    mapRef.current = map
+
+    const release = () => {
+      if (following.current) {
+        following.current = false
+        onFocusLost?.()
+      }
+    }
+    map.on('dragstart', release)
+
     const store = markers.current
     return () => {
+      map.off('dragstart', release)
       clearFriendLayers(store)
-      mapRef.current?.remove()
+      selfMarker.current = null
+      map.remove()
       mapRef.current = null
       fitted.current = false
     }
+  }, [onFocusLost])
+
+  // Posicion propia, para poder vernos a los dos a la vez.
+  useEffect(() => {
+    return gpsService.onFix(({ fix }) => {
+      const map = mapRef.current
+      if (!map) return
+      const position: L.LatLngExpression = [fix.latitude, fix.longitude]
+      if (selfMarker.current) {
+        selfMarker.current.setLatLng(position)
+      } else {
+        selfMarker.current = L.marker(position, {
+          icon: riderIcon(fix.heading),
+          interactive: false,
+          keyboard: false,
+          zIndexOffset: 1000,
+        }).addTo(map)
+      }
+    })
   }, [])
 
   useEffect(() => {
@@ -535,18 +584,53 @@ export function FriendsMap({
     syncFriendLayers(map, markers.current, presences)
     if (!map || presences.length === 0) return
 
-    // Solo se reencuadra la primera vez y cuando cambia el numero de amigos,
-    // para no arrebatarle el mapa al usuario mientras lo explora.
+    // Mientras se sigue a un amigo, el encuadre se rehace con cada posicion
+    // suya; si no, solo la primera vez, para no arrebatarle el mapa al usuario.
+    if (following.current && focus) {
+      fitBetween(map, presences.find((p) => p.uid === focus.uid))
+      return
+    }
     const bounds = boundsOf(presences.map((p) => [p.latitude, p.longitude] as LatLng))
     if (bounds && !fitted.current) {
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 })
       fitted.current = true
     }
-  }, [presences])
+  }, [presences, focus])
+
+  // Al elegir un amigo se encuadra el mapa entre su posicion y la mia.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !focus) {
+      following.current = false
+      return
+    }
+    following.current = true
+    fitBetween(map, presencesRef.current.find((p) => p.uid === focus.uid))
+  }, [focus])
 
   useEffect(() => {
     fitted.current = false
   }, [presences.length])
 
   return <div ref={containerRef} className={className ?? 'map map--fixed'} />
+}
+
+/**
+ * Encuadra el mapa para que quepan el amigo elegido y la posicion propia.
+ * Si todavia no hay senal GPS propia, centra sobre el amigo.
+ */
+function fitBetween(map: L.Map, friend: LivePresence | undefined): void {
+  if (!friend) return
+  const points: LatLng[] = [[friend.latitude, friend.longitude]]
+
+  const me = gpsService.getState().lastFix
+  if (me) points.push([me.latitude, me.longitude])
+
+  if (points.length === 1) {
+    map.setView(points[0], Math.max(map.getZoom(), 15))
+    return
+  }
+
+  const bounds = boundsOf(points)
+  if (bounds) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 })
 }
