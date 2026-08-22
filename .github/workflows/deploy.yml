@@ -36,14 +36,18 @@ jobs:
 
       - run: npm ci
 
-      - name: Comprobar herramientas
-        run: |
-          node --version
-          java -version
-          npx --yes firebase-tools@15 --version
-
       - name: Probar las reglas de Firestore
-        run: npm run test:rules
+        run: |
+          set +e
+          npm run test:rules 2>&1 | tee rules.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            # El log completo de Actions no se puede leer sin sesión, así que la
+            # cola se publica como anotación del run para poder diagnosticar.
+            summary=$(tail -c 2500 rules.log | python3 -c "import sys;print(sys.stdin.read().replace('%','%25').replace('\r','%0D').replace('\n','%0A'))")
+            echo "::error title=Fallo en las reglas de Firestore::$summary"
+          fi
+          exit "$code"
 
   build:
     needs: rules
