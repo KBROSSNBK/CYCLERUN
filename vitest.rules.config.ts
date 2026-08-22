@@ -13,6 +13,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // En CI los fallos se publican como anotaciones del run, que se pueden
+    // leer sin descargar el log completo.
+    reporters: process.env.GITHUB_ACTIONS ? ['default', 'github-actions'] : ['default'],
     include: ['tests/rules/**/*.test.ts'],
     // El emulador tarda en responder la primera vez.
     testTimeout: 20000,

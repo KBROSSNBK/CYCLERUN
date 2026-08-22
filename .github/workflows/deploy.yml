@@ -36,6 +36,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Comprobar herramientas
+        run: |
+          node --version
+          java -version
+          npx --yes firebase-tools@15 --version
+
       - name: Probar las reglas de Firestore
         run: npm run test:rules
 
