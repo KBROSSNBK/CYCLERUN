@@ -126,14 +126,29 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;')
 }
 
+/** Paleta para distinguir a varios amigos a la vez sobre el mismo mapa. */
+const FRIEND_COLORS = ['#5aa9ff', '#f0a184', '#c084fc', '#ffab4d', '#4ade80', '#f472b6']
+
+function colorForUid(uid: string): string {
+  let hash = 0
+  for (let i = 0; i < uid.length; i++) hash = (hash * 31 + uid.charCodeAt(i)) >>> 0
+  return FRIEND_COLORS[hash % FRIEND_COLORS.length]
+}
+
+export interface FriendLayer {
+  marker: L.Marker
+  path: L.Polyline | null
+}
+
 /**
- * Sincroniza los marcadores de los amigos con el mapa.
- * Reutiliza el marcador existente de cada uid para que el icono no parpadee en
- * cada actualizacion.
+ * Sincroniza con el mapa los marcadores y los recorridos de los amigos.
+ *
+ * Se reutilizan las capas existentes de cada uid en lugar de recrearlas: asi el
+ * icono no parpadea y la linea no se redibuja entera en cada actualizacion.
  */
-function syncFriendMarkers(
+function syncFriendLayers(
   map: L.Map | null,
-  store: Map<string, L.Marker>,
+  store: Map<string, FriendLayer>,
   presences: LivePresence[],
 ): void {
   if (!map) return
@@ -142,27 +157,68 @@ function syncFriendMarkers(
   for (const presence of presences) {
     seen.add(presence.uid)
     const position: L.LatLngExpression = [presence.latitude, presence.longitude]
-    const existing = store.get(presence.uid)
-    if (existing) {
-      existing.setLatLng(position)
-      existing.setIcon(friendIcon(presence))
-    } else {
-      const marker = L.marker(position, {
-        icon: friendIcon(presence),
-        interactive: false,
-        keyboard: false,
-        zIndexOffset: 500,
-      }).addTo(map)
-      store.set(presence.uid, marker)
+    const layer = store.get(presence.uid)
+
+    // Recorrido de su carrera en curso, si lo esta compartiendo.
+    const coords: LatLng[] = []
+    const lat = presence.pathLat ?? []
+    const lon = presence.pathLon ?? []
+    for (let i = 0; i < Math.min(lat.length, lon.length); i++) coords.push([lat[i], lon[i]])
+
+    if (layer) {
+      layer.marker.setLatLng(position)
+      layer.marker.setIcon(friendIcon(presence))
+      if (coords.length > 1) {
+        if (layer.path) {
+          layer.path.setLatLngs(coords)
+        } else {
+          layer.path = L.polyline(coords, friendPathStyle(presence.uid)).addTo(map)
+        }
+      } else if (layer.path) {
+        layer.path.remove()
+        layer.path = null
+      }
+      continue
     }
+
+    const marker = L.marker(position, {
+      icon: friendIcon(presence),
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 500,
+    }).addTo(map)
+    const path =
+      coords.length > 1 ? L.polyline(coords, friendPathStyle(presence.uid)).addTo(map) : null
+    store.set(presence.uid, { marker, path })
   }
 
-  for (const [uid, marker] of store) {
+  for (const [uid, layer] of store) {
     if (!seen.has(uid)) {
-      marker.remove()
+      layer.marker.remove()
+      layer.path?.remove()
       store.delete(uid)
     }
   }
+}
+
+/** El recorrido del amigo se dibuja mas fino que el propio, para distinguirlos. */
+function friendPathStyle(uid: string): L.PolylineOptions {
+  return {
+    color: colorForUid(uid),
+    weight: 3,
+    opacity: 0.75,
+    dashArray: '1 6',
+    lineCap: 'round',
+    lineJoin: 'round',
+  }
+}
+
+function clearFriendLayers(store: Map<string, FriendLayer>): void {
+  for (const layer of store.values()) {
+    layer.marker.remove()
+    layer.path?.remove()
+  }
+  store.clear()
 }
 
 // ------------------------------------------------------------------- mapa vivo
@@ -182,7 +238,7 @@ export function LiveMap({ follow, onFollowChange, friends = [] }: LiveMapProps) 
   const accuracyRef = useRef<L.Circle | null>(null)
   const lineRef = useRef<L.Polyline | null>(null)
   const segmentRef = useRef<number>(-1)
-  const friendMarkers = useRef(new Map<string, L.Marker>())
+  const friendMarkers = useRef(new Map<string, FriendLayer>())
   const followRef = useRef(follow)
 
   followRef.current = follow
@@ -278,15 +334,12 @@ export function LiveMap({ follow, onFollowChange, friends = [] }: LiveMapProps) 
 
   // Amigos en vivo sobre el mismo mapa que la propia carrera.
   useEffect(() => {
-    syncFriendMarkers(mapRef.current, friendMarkers.current, friends)
+    syncFriendLayers(mapRef.current, friendMarkers.current, friends)
   }, [friends])
 
   useEffect(() => {
     const store = friendMarkers.current
-    return () => {
-      for (const marker of store.values()) marker.remove()
-      store.clear()
-    }
+    return () => clearFriendLayers(store)
   }, [])
 
   const recenter = useCallback(() => {
@@ -462,7 +515,7 @@ export function FriendsMap({
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
-  const markers = useRef(new Map<string, L.Marker>())
+  const markers = useRef(new Map<string, FriendLayer>())
   const fitted = useRef(false)
 
   useEffect(() => {
@@ -470,8 +523,7 @@ export function FriendsMap({
     mapRef.current = createMap(containerRef.current)
     const store = markers.current
     return () => {
-      for (const marker of store.values()) marker.remove()
-      store.clear()
+      clearFriendLayers(store)
       mapRef.current?.remove()
       mapRef.current = null
       fitted.current = false
@@ -480,7 +532,7 @@ export function FriendsMap({
 
   useEffect(() => {
     const map = mapRef.current
-    syncFriendMarkers(map, markers.current, presences)
+    syncFriendLayers(map, markers.current, presences)
     if (!map || presences.length === 0) return
 
     // Solo se reencuadra la primera vez y cuando cambia el numero de amigos,

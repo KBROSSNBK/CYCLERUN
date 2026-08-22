@@ -3,7 +3,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { Layout } from '@/components/Layout'
 import { AuthProvider } from '@/hooks/useAuth'
-import { FriendsProvider } from '@/hooks/useFriends'
+import { FriendsProvider, useAppPresence } from '@/hooks/useFriends'
 import { useSettings } from '@/hooks/useSettings'
 import { FriendsPage } from '@/pages/FriendsPage'
 import { GpsDiagnosticsPage } from '@/pages/GpsDiagnosticsPage'
@@ -47,6 +47,7 @@ export default function App() {
     <AuthProvider>
       <FriendsProvider>
         <HashRouter>
+          <AppPresence />
           <UpdatePrompt />
           <Suspense fallback={<Spinner label="Cargando…" />}>
             <Routes>
@@ -69,6 +70,15 @@ export default function App() {
       </FriendsProvider>
     </AuthProvider>
   )
+}
+
+/**
+ * Publica la posicion en vivo mientras la app este en primer plano.
+ * Va aqui, en la raiz, para que no dependa de la pantalla que se este mirando.
+ */
+function AppPresence() {
+  useAppPresence()
+  return null
 }
 
 /**

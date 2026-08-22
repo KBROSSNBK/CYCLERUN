@@ -275,24 +275,33 @@ icono propio, y funciona sin conexión.
 4. La otra persona recibe una solicitud y debe **aceptarla**.
 5. Activa **Compartir ubicación en vivo** (está desactivada por defecto).
 
-Os veis en dos situaciones:
-
-- **Con la pantalla de Amigos abierta**, aunque nadie esté pedaleando. Es lo
-  que permite quedar y veros llegar.
-- **Mientras alguien graba una carrera**, con su velocidad y su distancia, tanto
-  en la pantalla de Amigos como en el mapa de tu propia carrera.
+**Basta con tener la aplicación abierta.** No hace falta iniciar una carrera:
+en cuanto la abres, los amigos autorizados te ven en el mapa. Si además estás
+grabando, ven también **el recorrido que llevas hecho**, dibujado en vivo, y el
+contador de kilómetros bajo tu nombre.
 
 El marcador es verde si esa persona está pedaleando, ámbar si está en pausa y
-azul si solo tiene la app abierta. Al salir de la pantalla o terminar la
-carrera, tu posición se **borra** de la nube.
+azul si solo tiene la app abierta. Cada amigo tiene su propio color de traza
+para poder seguir a varios a la vez.
+
+### Quién te ve
+
+En la lista de amigos, cada uno tiene su interruptor **«Puede ver mi
+ubicación»**, activado por defecto. Al desactivarlo, esa persona deja de verte
+de inmediato —no espera al siguiente envío— y los demás siguen viéndote con
+normalidad.
 
 Qué **no** ocurre nunca:
 
 - Tus carreras guardadas no las ve nadie, ni siquiera tus amigos.
-- Nadie que no sea amigo aceptado puede leer tu posición.
+- Nadie sin permiso concedido puede leer tu posición.
+- Al cerrar la aplicación o pasarla a segundo plano, tu posición se **borra** de
+  la nube y el receptor GPS se apaga.
 - No hay perfiles públicos ni buscador de usuarios.
 
----
+> Compartir en vivo mantiene el GPS encendido mientras la app está en primer
+> plano, lo que consume batería. Si no lo necesitas, desactiva el interruptor
+> general en Amigos o en Ajustes.
 
 ## 10. Limitaciones del GPS
 

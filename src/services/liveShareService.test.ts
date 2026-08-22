@@ -113,12 +113,12 @@ describe('condiciones para publicar', () => {
     expect(publishPresence).not.toHaveBeenCalled()
   })
 
-  it('no publica si todavia no hay amigos aceptados', () => {
+  it('no publica si ningun amigo tiene permiso', () => {
     liveShareService.configure({ user: USER, friendUids: [], enabled: true })
     liveShareService.setVisible(true)
     emitFix()
     expect(publishPresence).not.toHaveBeenCalled()
-    expect(liveShareService.getSnapshot().blockedBy).toContain('amigos')
+    expect(liveShareService.getSnapshot().blockedBy).toContain('permiso')
   })
 
   it('no publica sin sesion iniciada', () => {
@@ -135,8 +135,8 @@ describe('condiciones para publicar', () => {
   })
 })
 
-describe('publicacion con la pantalla de amigos abierta', () => {
-  it('publica sin necesidad de estar grabando una carrera', async () => {
+describe('publicacion con la aplicacion abierta', () => {
+  it('publica solo por tener la aplicacion abierta, sin carrera', async () => {
     liveShareService.configure({ user: USER, friendUids: ['amigo'], enabled: true })
     lastFix = makeFix()
     liveShareService.setVisible(true)
@@ -149,7 +149,7 @@ describe('publicacion con la pantalla de amigos abierta', () => {
     expect(payload.visibleTo).toEqual(['amigo'])
   })
 
-  it('retira la posicion al cerrar la pantalla', async () => {
+  it('retira la posicion al pasar a segundo plano', async () => {
     liveShareService.configure({ user: USER, friendUids: ['amigo'], enabled: true })
     lastFix = makeFix()
     liveShareService.setVisible(true)
@@ -186,7 +186,7 @@ describe('publicacion durante la carrera', () => {
   it('empieza a publicar al iniciar una carrera aunque no se este mirando el mapa', async () => {
     liveShareService.configure({ user: USER, friendUids: ['amigo'], enabled: true })
     lastFix = makeFix()
-    // La pantalla de amigos NO está abierta.
+    // La aplicación está en segundo plano.
     expect(publishPresence).not.toHaveBeenCalled()
 
     rideEngine.start()
@@ -259,5 +259,61 @@ describe('privacidad', () => {
 
     const payload = publishPresence.mock.calls[0][0]
     expect(payload.visibleTo).toEqual(['a', 'b'])
+  })
+})
+
+describe('recorrido en vivo', () => {
+  it('comparte el recorrido de la carrera en curso', async () => {
+    liveShareService.configure({ user: USER, friendUids: ['amigo'], enabled: true })
+    lastFix = makeFix()
+    rideEngine.start()
+    // Varios puntos para que haya recorrido que compartir.
+    for (let i = 0; i < 6; i++) {
+      vi.advanceTimersByTime(1000)
+      emitFix()
+    }
+    await flush()
+
+    const payload = publishPresence.mock.calls.at(-1)?.[0]
+    expect(Array.isArray(payload?.pathLat)).toBe(true)
+    expect((payload?.pathLat as number[]).length).toBeGreaterThan(1)
+    expect((payload?.pathLat as number[]).length).toBe((payload?.pathLon as number[]).length)
+  })
+
+  it('no comparte recorrido si solo tiene la aplicacion abierta', async () => {
+    liveShareService.configure({ user: USER, friendUids: ['amigo'], enabled: true })
+    lastFix = makeFix()
+    liveShareService.setVisible(true)
+    await flush()
+
+    const payload = publishPresence.mock.calls[0][0]
+    expect(payload.pathLat).toEqual([])
+    expect(payload.pathLon).toEqual([])
+  })
+})
+
+describe('permisos por amigo', () => {
+  it('publica de inmediato cuando cambia quien puede verme', async () => {
+    liveShareService.configure({ user: USER, friendUids: ['ana', 'beto'], enabled: true })
+    lastFix = makeFix()
+    liveShareService.setVisible(true)
+    await flush()
+    expect(publishPresence.mock.calls[0][0].visibleTo).toEqual(['ana', 'beto'])
+
+    // Se le retira el permiso a Beto sin esperar al intervalo de escritura.
+    liveShareService.configure({ friendUids: ['ana'] })
+    await flush()
+    expect(publishPresence.mock.calls.at(-1)?.[0].visibleTo).toEqual(['ana'])
+  })
+
+  it('deja de publicar si se retira el permiso a todos', async () => {
+    liveShareService.configure({ user: USER, friendUids: ['ana'], enabled: true })
+    lastFix = makeFix()
+    liveShareService.setVisible(true)
+    await flush()
+
+    liveShareService.configure({ friendUids: [] })
+    await flush()
+    expect(clearPresence).toHaveBeenCalledWith('yo')
   })
 })

@@ -196,6 +196,7 @@ export function watchFriends(uid: string, onChange: (friends: Friend[]) => void)
             displayName: (snap.data().displayName as string | null) ?? null,
             photoURL: (snap.data().photoURL as string | null) ?? null,
             since: (snap.data().since as number) ?? 0,
+            shareLocation: (snap.data().shareLocation as boolean | undefined) ?? true,
           }))
           .sort((a, b) => (a.displayName ?? '').localeCompare(b.displayName ?? '')),
       )
@@ -211,7 +212,25 @@ export async function listFriends(uid: string): Promise<Friend[]> {
     displayName: (snap.data().displayName as string | null) ?? null,
     photoURL: (snap.data().photoURL as string | null) ?? null,
     since: (snap.data().since as number) ?? 0,
+    shareLocation: (snap.data().shareLocation as boolean | undefined) ?? true,
   }))
+}
+
+/**
+ * Decide si un amigo concreto puede ver mi ubicacion en vivo.
+ * Se guarda en mi propia lista de amigos, que solo yo puedo escribir: el otro
+ * no puede concederse permiso a si mismo.
+ */
+export async function setFriendVisibility(
+  uid: string,
+  friendUid: string,
+  allowed: boolean,
+): Promise<void> {
+  await setDoc(
+    doc(getDb(), 'users', uid, 'friends', friendUid),
+    { shareLocation: allowed },
+    { merge: true },
+  )
 }
 
 /** Elimina la amistad por ambos lados; cualquiera de los dos puede hacerlo. */

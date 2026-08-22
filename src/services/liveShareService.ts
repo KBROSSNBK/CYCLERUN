@@ -2,20 +2,23 @@ import { firebaseEnabled } from '@/firebase/app'
 import type { AppUser } from '@/firebase/auth'
 import { clearPresence, publishPresence } from '@/firebase/live'
 import { gpsService } from '@/gps/gpsService'
+import { buildPreviewIndices } from '@/utils/geo'
 import { rideEngine } from './rideEngine'
 
 /**
  * Publicacion de la posicion en vivo para los amigos.
  *
- * Se publica en dos situaciones, y en ninguna otra:
+ * Se publica **mientras la aplicacion esta abierta en primer plano**, haya o no
+ * una carrera en curso: basta con abrirla para que los amigos autorizados te
+ * vean. Si ademas se esta grabando, se comparte tambien el recorrido de la
+ * salida para que vean por donde has pasado.
  *
- *  1. **Durante una carrera**, si el usuario tiene activado el compartir.
- *  2. **Con la pantalla de Amigos abierta**, para poder veros en el mapa antes
- *     de salir. Esto es lo que permite que dos personas se vean a la vez sin
- *     tener que estar las dos grabando.
+ * Se deja de publicar, y el documento se borra de Firestore, en cuanto la
+ * aplicacion pasa a segundo plano, se desactiva el ajuste, se retira el permiso
+ * a todos los amigos o se cierra sesion.
  *
- * En cuanto se cierra esa pantalla y no hay carrera, o se desactiva el ajuste,
- * o se cierra sesion, el documento se borra de Firestore.
+ * `visibleTo` contiene solo a los amigos con permiso concedido, que es lo unico
+ * que las reglas de Firestore dejan leer.
  *
  * La escritura va limitada por `intervalMs` para no gastar cuota: con 8 s son
  * unas 450 escrituras por hora.
@@ -56,6 +59,8 @@ class LiveShareService {
   private hasPublished = false
   /** ultimo estado publicado, para detectar cambios que no pueden esperar */
   private lastPublishedStatus: string | null = null
+  /** ultimo conjunto de destinatarios publicado */
+  private lastPublishedAudience: string | null = null
   /** hay un cambio de estado esperando a que termine la escritura en curso */
   private needsRepublish = false
 
@@ -88,8 +93,8 @@ class LiveShareService {
   }
 
   /**
-   * Marca que el usuario esta mirando el mapa de amigos. Mientras sea cierto
-   * se publica la posicion aunque no haya carrera.
+   * Marca si la aplicacion esta en primer plano. Mientras lo este se publica la
+   * posicion aunque no haya ninguna carrera en curso.
    */
   setVisible(visible: boolean): void {
     if (this.visible === visible) return
@@ -126,8 +131,9 @@ class LiveShareService {
     if (!firebaseEnabled) return 'Firebase no está configurado'
     if (!this.config.user) return 'Inicia sesión con Google'
     if (!this.config.enabled) return 'Activa «Compartir ubicación en vivo»'
-    if (this.config.friendUids.length === 0) return 'Todavía no tienes amigos aceptados'
-    if (!this.visible && !rideEngine.isActive()) return 'Abre esta pantalla o inicia una carrera'
+    if (this.config.friendUids.length === 0)
+      return 'Ningún amigo tiene permiso para verte ahora mismo'
+    if (!this.visible && !rideEngine.isActive()) return 'La aplicación está en segundo plano'
     if (!gpsService.getState().lastFix) return 'Esperando la primera posición del GPS'
     return null
   }
@@ -164,6 +170,11 @@ class LiveShareService {
         const uid = this.config.user?.uid ?? previousUid
         if (uid) void this.withdraw(uid)
       }
+      // Al pasar la app a segundo plano se suelta el receptor: mantenerlo
+      // encendido para nadie seria el mayor gasto de bateria de la aplicacion.
+      // Solo se apaga en ese caso, nunca con una pantalla a la vista, para no
+      // dejar sin posiciones al mapa o al diagnostico del GPS.
+      if (!this.visible && !rideEngine.isActive()) gpsService.stop()
     }
 
     this.publish({ blockedBy: this.describeBlock() })
@@ -198,8 +209,10 @@ class LiveShareService {
 
     // Empezar, pausar o reanudar se publica al instante: hacer esperar al
     // limite de escrituras dejaria a los amigos viendo un estado falso durante
-    // varios segundos.
-    const statusChanged = status !== this.lastPublishedStatus
+    // varios segundos. Un cambio en quien puede verme tampoco puede esperar:
+    // si acabo de quitarle el permiso a alguien, debe dejar de verme ya.
+    const audience = this.config.friendUids.join(',')
+    const statusChanged = status !== this.lastPublishedStatus || audience !== this.lastPublishedAudience
     const now = Date.now()
     if (!force && !statusChanged && now - this.lastPublishAt < this.config.intervalMs) return
 
@@ -216,6 +229,10 @@ class LiveShareService {
       return
     }
 
+    // Recorrido de la carrera en curso, simplificado para que quepa holgado en
+    // el documento: los amigos ven por donde has pasado, no solo donde estas.
+    const path = riding ? buildLivePath() : { lat: [], lon: [] }
+
     this.lastPublishAt = now
     this.publishing = true
     void publishPresence({
@@ -231,11 +248,14 @@ class LiveShareService {
       status,
       rideId: riding ? ride.rideId : null,
       updatedAt: now,
+      pathLat: path.lat,
+      pathLon: path.lon,
       visibleTo: this.config.friendUids,
     })
       .then(() => {
         this.hasPublished = true
         this.lastPublishedStatus = status
+        this.lastPublishedAudience = audience
         this.publish({
           sharing: true,
           reason: riding ? 'ride' : 'screen',
@@ -262,6 +282,7 @@ class LiveShareService {
   private async withdraw(uid: string): Promise<void> {
     this.hasPublished = false
     this.lastPublishedStatus = null
+    this.lastPublishedAudience = null
     this.publish({ sharing: false, reason: null })
     await clearPresence(uid)
   }
@@ -280,6 +301,29 @@ class LiveShareService {
     this.state = next
     this.listeners.forEach((cb) => cb(next))
   }
+}
+
+/** Puntos maximos del recorrido que se comparte en vivo. */
+const LIVE_PATH_POINTS = 200
+
+/**
+ * Recorrido simplificado de la carrera en curso.
+ * Se recorta a `LIVE_PATH_POINTS` puntos para que el documento se mantenga en
+ * unos pocos kilobytes por muy larga que sea la salida.
+ */
+function buildLivePath(): { lat: number[]; lon: number[] } {
+  const points = rideEngine.getPoints()
+  if (points.length === 0) return { lat: [], lon: [] }
+  const indices = buildPreviewIndices(points, LIVE_PATH_POINTS)
+  return {
+    lat: indices.map((i) => round(points[i].latitude, 5)),
+    lon: indices.map((i) => round(points[i].longitude, 5)),
+  }
+}
+
+function round(value: number, decimals: number): number {
+  const factor = 10 ** decimals
+  return Math.round(value * factor) / factor
 }
 
 export const liveShareService = new LiveShareService()

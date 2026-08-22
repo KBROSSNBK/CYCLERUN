@@ -4,7 +4,7 @@ import { FriendsMap } from '@/components/RouteMap'
 import { ConfirmDialog, EmptyState, Notice, Spinner, Switch } from '@/components/ui'
 import { firebaseEnabled } from '@/firebase/app'
 import { useAuth } from '@/hooks/useAuth'
-import { useFriends, useLiveShare } from '@/hooks/useFriends'
+import { useFriends, useLiveShareState } from '@/hooks/useFriends'
 import { useSettings } from '@/hooks/useSettings'
 import type { Friend, LivePresence } from '@/types'
 import { formatDistance, formatRelative, formatSpeedWithUnit } from '@/utils/format'
@@ -30,10 +30,11 @@ export function FriendsPage() {
     accept,
     reject,
     remove,
+    setVisibility,
   } = useFriends()
-  // Mientras esta pantalla esté abierta se publica la posición, aunque no haya
-  // carrera: es lo que permite veros en el mapa a la vez sin salir a pedalear.
-  const live = useLiveShare(true)
+  const live = useLiveShareState()
+  // Solo cuentan los amigos con permiso concedido.
+  const allowed = friends.filter((friend) => friend.shareLocation !== false).length
 
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState<{ tone: 'info' | 'danger'; text: string } | null>(null)
@@ -68,8 +69,8 @@ export function FriendsPage() {
         />
         {mode === 'anonymous' && (
           <Notice tone="info" icon="🔒">
-            Tu ubicación solo se comparte con quien aceptes como amigo, y solo mientras tengas
-            abierta la pantalla de amigos o estés grabando una carrera, con la opción activada.
+            Tu ubicación solo la ven los amigos a los que se lo permitas, y solo mientras la
+            aplicación esté abierta.
           </Notice>
         )}
       </>
@@ -134,8 +135,8 @@ export function FriendsPage() {
                 Ninguno de tus amigos está compartiendo su posición ahora mismo.
               </p>
               <p className="field__hint" style={{ marginTop: 'var(--gap-2)' }}>
-                Aparecen aquí cuando abren esta pantalla o cuando graban una carrera, siempre con
-                el interruptor de abajo activado.
+                Aparecen aquí en cuanto abren la aplicación, con el interruptor activado y
+                habiéndote dado permiso.
               </p>
             </div>
           )}
@@ -155,8 +156,8 @@ export function FriendsPage() {
               <div>
                 <p className="field__label">Ubicación en vivo</p>
                 <p className="field__hint">
-                  Tus amigos te ven mientras tengas esta pantalla abierta o estés grabando una
-                  carrera. Al salir, tu posición se borra de la nube.
+                  Tus amigos autorizados te ven mientras la aplicación esté abierta, estés o no
+                  grabando. Al cerrarla, tu posición se borra de la nube.
                 </p>
               </div>
               <Switch
@@ -172,7 +173,7 @@ export function FriendsPage() {
               {live.sharing ? (
                 <div className="badge badge--ok">
                   <span className="dot dot--pulse" aria-hidden />
-                  Visible para {friends.length} {friends.length === 1 ? 'amigo' : 'amigos'}
+                  Visible para {allowed} {allowed === 1 ? 'amigo' : 'amigos'}
                   {live.lastPublishAt && ` · ${formatRelative(live.lastPublishAt)}`}
                 </div>
               ) : (
@@ -316,6 +317,29 @@ export function FriendsPage() {
                       Quitar
                     </button>
                   </div>
+
+                  {/* Permiso individual: cada amigo se activa o desactiva por
+                      separado, sin tocar a los demás. */}
+                  <div
+                    className="row row--between"
+                    style={{ marginTop: 'var(--gap-3)', paddingTop: 'var(--gap-3)', borderTop: '1px solid var(--border)' }}
+                  >
+                    <div>
+                      <p className="field__label" style={{ fontSize: '0.85rem' }}>
+                        Puede ver mi ubicación
+                      </p>
+                      <p className="field__hint">
+                        {friend.shareLocation === false
+                          ? 'No te ve en el mapa.'
+                          : 'Te ve en el mapa mientras tengas la app abierta.'}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={friend.shareLocation !== false}
+                      onChange={(value) => void setVisibility(friend.uid, value)}
+                      label={`Compartir mi ubicación con ${friend.displayName ?? 'este amigo'}`}
+                    />
+                  </div>
                 </div>
               )
             })}
@@ -324,9 +348,9 @@ export function FriendsPage() {
       </section>
 
       <Notice tone="info" icon="🔒">
-        Nadie puede ver tu ubicación sin ser tu amigo, y solo mientras compartes durante una
-        carrera. Al terminar, la posición se borra de la nube. Tus carreras guardadas siguen siendo
-        privadas: los amigos no las ven. <Link to="/settings">Ajustes de privacidad</Link>
+        Solo te ven los amigos que tengas activados aquí, y solo mientras la aplicación esté
+        abierta: al cerrarla, tu posición se borra de la nube. Tus carreras guardadas siguen siendo
+        privadas y no las ve nadie. <Link to="/settings">Ajustes de privacidad</Link>
       </Notice>
 
       <ConfirmDialog

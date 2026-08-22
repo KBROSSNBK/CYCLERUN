@@ -17,6 +17,7 @@ import {
   findUidByEmail,
   rejectFriendRequest,
   removeFriend,
+  setFriendVisibility,
   sendFriendRequest,
   watchFriendRequests,
   watchFriends,
@@ -49,6 +50,8 @@ interface FriendsContextValue {
   accept: (request: FriendRequest) => Promise<void>
   reject: (request: FriendRequest) => Promise<void>
   remove: (friendUid: string) => Promise<void>
+  /** Concede o retira a un amigo el permiso para ver mi ubicacion. */
+  setVisibility: (friendUid: string, allowed: boolean) => Promise<void>
 }
 
 const FriendsContext = createContext<FriendsContextValue | null>(null)
@@ -109,7 +112,11 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer)
   }, [liveFriends.length])
 
-  const friendUids = useMemo(() => friends.map((friend) => friend.uid), [friends])
+  // Solo se publica hacia los amigos con permiso concedido.
+  const friendUids = useMemo(
+    () => friends.filter((friend) => friend.shareLocation !== false).map((friend) => friend.uid),
+    [friends],
+  )
 
   // Mantiene al dia el servicio que publica la posicion en vivo.
   useEffect(() => {
@@ -161,6 +168,14 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
     [uid],
   )
 
+  const setVisibility = useCallback(
+    async (friendUid: string, allowed: boolean) => {
+      if (!uid) return
+      await setFriendVisibility(uid, friendUid, allowed)
+    },
+    [uid],
+  )
+
   const remove = useCallback(
     async (friendUid: string) => {
       if (!uid) return
@@ -182,8 +197,9 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
       accept,
       reject,
       remove,
+      setVisibility,
     }),
-    [friends, requests, liveFriends, friendCode, loading, error, liveError, addFriend, accept, reject, remove],
+    [friends, requests, liveFriends, friendCode, loading, error, liveError, addFriend, accept, reject, remove, setVisibility],
   )
 
   return <FriendsContext.Provider value={value}>{children}</FriendsContext.Provider>
@@ -196,22 +212,33 @@ export function useFriends(): FriendsContextValue {
 }
 
 /**
- * Estado de la publicacion de la propia posicion, y activacion mientras la
- * pantalla de amigos esta abierta.
+ * Publica la posicion mientras la aplicacion esta en primer plano.
+ *
+ * Se monta una sola vez, en la raiz: basta con tener la app abierta para que
+ * los amigos autorizados te vean, sin necesidad de iniciar una carrera ni de
+ * estar en una pantalla concreta. Al pasar a segundo plano se deja de publicar
+ * y la posicion se borra de la nube, de modo que nadie sigue viendote cuando ya
+ * no estas usando la aplicacion.
  */
-export function useLiveShare(visible: boolean): LiveShareState {
+export function useAppPresence(): void {
   useEffect(() => {
-    liveShareService.setVisible(visible)
-    if (!visible) return
-    // Al cerrar la pantalla (o la pestana) se retira la posicion publicada.
+    const sync = () => liveShareService.setVisible(document.visibilityState === 'visible')
     const hide = () => liveShareService.setVisible(false)
-    window.addEventListener('pagehide', hide)
-    return () => {
-      window.removeEventListener('pagehide', hide)
-      liveShareService.setVisible(false)
-    }
-  }, [visible])
 
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    window.addEventListener('pagehide', hide)
+
+    return () => {
+      document.removeEventListener('visibilitychange', sync)
+      window.removeEventListener('pagehide', hide)
+      hide()
+    }
+  }, [])
+}
+
+/** Estado de la publicacion de la propia posicion, solo para mostrarlo. */
+export function useLiveShareState(): LiveShareState {
   return useSyncExternalStore(
     liveShareService.subscribe,
     liveShareService.getSnapshot,

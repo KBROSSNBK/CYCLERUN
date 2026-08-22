@@ -189,6 +189,12 @@ export interface PublicProfile {
 export interface Friend extends PublicProfile {
   /** momento en el que se acepto la amistad */
   since: number
+  /**
+   * Si esta persona puede ver mi ubicacion en vivo. Viene activado por
+   * defecto; la ausencia del campo se interpreta como `true`, para que las
+   * amistades creadas antes de existir esta opcion sigan funcionando.
+   */
+  shareLocation?: boolean
 }
 
 export interface FriendRequest extends PublicProfile {
@@ -217,6 +223,12 @@ export interface LivePresence extends PublicProfile {
   rideId: string | null
   /** marca de tiempo del emisor (su reloj) */
   updatedAt: number
+  /**
+   * Recorrido de la carrera en curso, simplificado. Permite que los amigos vean
+   * por donde has pasado y no solo donde estas. Vacio si no hay carrera.
+   */
+  pathLat?: number[]
+  pathLon?: number[]
   visibleTo: string[]
   /** momento en que este dispositivo recibio el dato; lo anade el lector */
   receivedAt?: number
