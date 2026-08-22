@@ -299,6 +299,12 @@ export function SettingsPage() {
         </div>
       </section>
 
+      <section className="section">
+        <Link to="/android" className="btn btn--block">
+          🤖 App de Android
+        </Link>
+      </section>
+
       <p className="text-dim center" style={{ fontSize: '0.75rem', marginTop: 'var(--gap-5)' }}>
         CYCLERUN · datos GPS reales del dispositivo · sin seguimiento de terceros
       </p>

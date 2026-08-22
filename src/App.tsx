@@ -5,6 +5,7 @@ import { Layout } from '@/components/Layout'
 import { AuthProvider } from '@/hooks/useAuth'
 import { FriendsProvider, useAppPresence } from '@/hooks/useFriends'
 import { useSettings } from '@/hooks/useSettings'
+import { AndroidPage } from '@/pages/AndroidPage'
 import { FriendsPage } from '@/pages/FriendsPage'
 import { GpsDiagnosticsPage } from '@/pages/GpsDiagnosticsPage'
 import { HistoryPage } from '@/pages/HistoryPage'
@@ -62,6 +63,7 @@ export default function App() {
                 <Route path="compare" element={<ComparePage />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="gps" element={<GpsDiagnosticsPage />} />
+                <Route path="android" element={<AndroidPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>

@@ -555,3 +555,56 @@ a.bento__card:active {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+
+/* Pasos de instalación y enlace para compartir ------------------------------ */
+
+.steps {
+  counter-reset: step;
+  /* El numero lo pinta ::before; el marcador del navegador sobra. */
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+}
+
+.steps li {
+  position: relative;
+  padding-left: 38px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.steps li strong {
+  color: var(--text);
+}
+
+.steps li::before {
+  counter-increment: step;
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: -2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.share-link {
+  display: block;
+  padding: var(--gap-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 0.76rem;
+  word-break: break-all;
+  color: var(--text-muted);
+}

@@ -11,6 +11,7 @@ import {
 import { TopBar } from '@/components/Layout'
 import { ConfirmDialog, Notice, SkeletonList } from '@/components/ui'
 import { activityOf } from '@/config/activities'
+import { isNativeRuntime } from '@/gps/nativeGeolocation'
 import { useAuth } from '@/hooks/useAuth'
 import { useInstallPrompt } from '@/hooks/useInstallPrompt'
 import { useRides } from '@/hooks/useRides'
@@ -252,28 +253,41 @@ export function HomePage() {
         </div>
       )}
 
-      {!install.installed && (install.canPrompt || install.needsManualSteps) && (
+      {!isNativeRuntime() && (
         <section className="section">
           <div className="card card--accent">
             <div className="row row--between" style={{ gap: 'var(--gap-3)' }}>
               <div>
-                <strong>Instálala en el móvil</strong>
+                <strong>Llévala en el móvil</strong>
                 <p className="text-muted" style={{ fontSize: '0.84rem', marginTop: 4 }}>
-                  {install.canPrompt
-                    ? 'Se abre a pantalla completa y funciona sin conexión.'
-                    : 'En iPhone: toca Compartir y luego «Añadir a pantalla de inicio».'}
+                  La app de Android sigue registrando con la pantalla bloqueada; la web se detiene
+                  al apagarla.
                 </p>
               </div>
-              {install.canPrompt && (
-                <button
-                  type="button"
-                  className="btn btn--sm btn--primary"
-                  onClick={() => void install.install()}
-                >
-                  Instalar
-                </button>
-              )}
+              <Link to="/android" className="btn btn--sm btn--primary">
+                Ver
+              </Link>
             </div>
+
+            {(install.canPrompt || install.needsManualSteps) && !install.installed && (
+              <p className="field__hint" style={{ marginTop: 'var(--gap-3)' }}>
+                {install.canPrompt ? (
+                  <>
+                    También puedes añadirla como acceso directo sin instalar nada.{' '}
+                    <button
+                      type="button"
+                      className="btn btn--sm"
+                      style={{ marginTop: 'var(--gap-2)' }}
+                      onClick={() => void install.install()}
+                    >
+                      Añadir a la pantalla de inicio
+                    </button>
+                  </>
+                ) : (
+                  'En iPhone: toca Compartir y luego «Añadir a pantalla de inicio».'
+                )}
+              </p>
+            )}
           </div>
         </section>
       )}
