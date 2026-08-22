@@ -282,8 +282,8 @@ export function startOfYear(timestamp: number): number {
   return new Date(new Date(timestamp).getFullYear(), 0, 1).getTime()
 }
 
-const dayFormatter = new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short' })
-const monthFormatter = new Intl.DateTimeFormat('es-ES', { month: 'short' })
+const dayFormatter = new Intl.DateTimeFormat('es', { day: '2-digit', month: 'short' })
+const monthFormatter = new Intl.DateTimeFormat('es', { month: 'short' })
 
 function shortDay(timestamp: number): string {
   return dayFormatter.format(new Date(timestamp)).replace('.', '')

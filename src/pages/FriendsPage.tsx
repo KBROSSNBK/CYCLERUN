@@ -256,7 +256,7 @@ export function FriendsPage() {
                         <p className="text-dim" style={{ fontSize: '0.75rem' }}>
                           {live
                             ? `En ruta · ${formatDistance(live.distance, settings.distanceUnit)}`
-                            : `Amigos desde ${new Date(friend.since).toLocaleDateString('es-ES')}`}
+                            : `Amigos desde ${new Date(friend.since).toLocaleDateString('es')}`}
                         </p>
                       </div>
                     </div>

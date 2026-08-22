@@ -87,13 +87,13 @@ export function formatAccuracy(meters: number | null): string {
   return `±${Math.round(meters)} m`
 }
 
-const dateFormatter = new Intl.DateTimeFormat('es-ES', {
+const dateFormatter = new Intl.DateTimeFormat('es', {
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',
 })
-const timeFormatter = new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' })
-const longDateFormatter = new Intl.DateTimeFormat('es-ES', {
+const timeFormatter = new Intl.DateTimeFormat('es', { hour: '2-digit', minute: '2-digit' })
+const longDateFormatter = new Intl.DateTimeFormat('es', {
   weekday: 'long',
   day: 'numeric',
   month: 'long',

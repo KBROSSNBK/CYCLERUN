@@ -150,8 +150,11 @@ producción con `auth/unauthorized-domain`.
 
 ### 4.5 Crear la base de datos
 
-**Firestore Database → Crear base de datos → modo producción** (la ubicación
-`eur3` o `europe-west` va bien desde España).
+**Firestore Database → Crear base de datos → modo producción**, ubicación
+`southamerica-west1 (Santiago)`.
+
+> Ojo: no confundir con **Realtime Database**, que es otro producto y no se usa
+> aquí. La ubicación de Firestore **no se puede cambiar** una vez creada.
 
 ### 4.6 Publicar las reglas de seguridad
 
