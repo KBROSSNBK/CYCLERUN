@@ -17,7 +17,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Las reglas de seguridad se prueban contra el emulador de Firestore, que
+  # necesita Java: aqui esta disponible, en Windows no siempre.
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - run: npm ci
+
+      - name: Probar las reglas de Firestore
+        run: npm run test:rules
+
   build:
+    needs: rules
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
