@@ -2,6 +2,7 @@ import type { AppSettings } from '@/config/defaults'
 import { DEFAULT_SETTINGS } from '@/config/defaults'
 import type { GeoFix, GpsState, GpsStatus } from '@/types'
 import { haversine } from '@/utils/geo'
+import { isNativeRuntime, startNativeWatch } from './nativeGeolocation'
 import { isGeolocationSupported, isSecureContext } from './permissions'
 
 /**
@@ -62,6 +63,9 @@ const STATUS_MESSAGES: Record<GpsStatus, string> = {
 class GpsService {
   private options: GpsOptions = pickOptions(DEFAULT_SETTINGS)
   private watchId: number | null = null
+  /** funcion para detener el seguimiento nativo, si esta en uso */
+  private nativeStop: (() => void) | null = null
+  private startingNative = false
   private watchdog: ReturnType<typeof setInterval> | null = null
 
   private fixListeners = new Set<FixListener>()
@@ -84,7 +88,7 @@ class GpsService {
   // ---------------------------------------------------------------- lifecycle
 
   isRunning(): boolean {
-    return this.watchId !== null
+    return this.watchId !== null || this.nativeStop !== null
   }
 
   configure(settings: AppSettings): void {
@@ -94,9 +98,18 @@ class GpsService {
   /**
    * Arranca el seguimiento. Es idempotente: llamarlo dos veces no duplica el
    * watch, de modo que varias pantallas pueden pedirlo sin coordinarse.
+   *
+   * Dentro de la aplicacion nativa se usa el servicio en primer plano, que
+   * sigue entregando posiciones con la pantalla apagada; en el navegador, la
+   * Geolocation API, que se detiene al bloquear el telefono.
    */
   start(): void {
-    if (this.watchId !== null) return
+    if (this.isRunning() || this.startingNative) return
+
+    if (isNativeRuntime()) {
+      this.startNative()
+      return
+    }
 
     if (!isGeolocationSupported()) {
       this.setStatus('unsupported')
@@ -109,7 +122,7 @@ class GpsService {
 
     this.setStatus('searching')
     this.watchId = navigator.geolocation.watchPosition(
-      (position) => this.handlePosition(position),
+      (position) => this.handleFix(toFix(position)),
       (error) => this.handleError(error),
       {
         enableHighAccuracy: true,
@@ -121,10 +134,41 @@ class GpsService {
     this.watchdog = setInterval(() => this.checkSignal(), 2000)
   }
 
+  private startNative(): void {
+    this.startingNative = true
+    this.setStatus('searching')
+    this.watchdog = setInterval(() => this.checkSignal(), 2000)
+
+    void startNativeWatch({
+      onFix: (fix) => this.handleFix(fix),
+      onError: (message, denied) => {
+        if (denied) {
+          this.setStatus('denied')
+          this.stop()
+        } else {
+          this.setStatus('unavailable', message)
+        }
+      },
+    })
+      .then((stopWatch) => {
+        this.nativeStop = stopWatch
+      })
+      .catch((error: Error) => {
+        this.setStatus('unavailable', error?.message ?? 'No se ha podido iniciar el GPS')
+      })
+      .finally(() => {
+        this.startingNative = false
+      })
+  }
+
   stop(): void {
     if (this.watchId !== null) {
       navigator.geolocation.clearWatch(this.watchId)
       this.watchId = null
+    }
+    if (this.nativeStop) {
+      this.nativeStop()
+      this.nativeStop = null
     }
     if (this.watchdog !== null) {
       clearInterval(this.watchdog)
@@ -176,8 +220,8 @@ class GpsService {
 
   // -------------------------------------------------------------- procesamiento
 
-  private handlePosition(position: GeolocationPosition): void {
-    const fix = toFix(position)
+  /** Procesa una posicion, venga del navegador o del servicio nativo. */
+  private handleFix(fix: GeoFix): void {
     const now = Date.now()
     const {
       maxAccuracy,

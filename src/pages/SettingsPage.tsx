@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ConfirmDialog, Notice, Segmented, StatTile, Switch } from '@/components/ui'
+import { ConfirmDialog, Notice, RangeSlider, Segmented, StatTile, Switch } from '@/components/ui'
 import {
   SETTINGS_LIMITS,
   type AppSettings,
@@ -355,14 +355,13 @@ function Slider({
           {format ? format(value) : `${value} ${limit.unit}`}
         </span>
       </div>
-      <input
-        type="range"
+      <RangeSlider
         min={limit.min}
         max={limit.max}
         step={limit.step}
         value={value}
-        aria-label={label}
-        onChange={(event) => update({ [name]: Number(event.target.value) } as Partial<AppSettings>)}
+        label={label}
+        onChange={(next) => update({ [name]: next } as Partial<AppSettings>)}
       />
       <p className="field__hint">{hint}</p>
     </div>

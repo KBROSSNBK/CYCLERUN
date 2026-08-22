@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 
 /** Piezas visuales reutilizables. Sin logica de dominio. */
 
@@ -182,4 +182,104 @@ export function SkeletonList({ count = 3 }: { count?: number }) {
       ))}
     </div>
   )
+}
+
+/**
+ * Deslizador que solo se mueve arrastrando el punto.
+ *
+ * Un `<input type="range">` nativo salta al valor allí donde toques la barra, y
+ * en una pantalla táctil eso hace muy fácil descolocar un ajuste sin querer.
+ * Aquí la barra es inerte: el valor solo cambia arrastrando el punto o con el
+ * teclado, que se mantiene por accesibilidad.
+ */
+export function RangeSlider({
+  value,
+  min,
+  max,
+  step,
+  label,
+  onChange,
+}: {
+  value: number
+  min: number
+  max: number
+  step: number
+  label: string
+  onChange: (value: number) => void
+}) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState(false)
+
+  const percent = max > min ? ((value - min) / (max - min)) * 100 : 0
+  const decimals = decimalsOf(step)
+
+  const snap = (raw: number): number => {
+    const stepped = Math.round((raw - min) / step) * step + min
+    return Number(Math.min(max, Math.max(min, stepped)).toFixed(decimals))
+  }
+
+  const valueAt = (clientX: number): number => {
+    const track = trackRef.current
+    if (!track) return value
+    const rect = track.getBoundingClientRect()
+    const ratio = rect.width > 0 ? (clientX - rect.left) / rect.width : 0
+    return snap(min + Math.min(1, Math.max(0, ratio)) * (max - min))
+  }
+
+  const nudge = (steps: number) => onChange(snap(value + steps * step))
+
+  return (
+    <div className="slider">
+      <div className="slider__track" ref={trackRef}>
+        <div className="slider__fill" style={{ width: `${percent}%` }} />
+        <div
+          className={`slider__thumb ${dragging ? 'is-dragging' : ''}`}
+          style={{ left: `${percent}%` }}
+          role="slider"
+          tabIndex={0}
+          aria-label={label}
+          aria-valuemin={min}
+          aria-valuemax={max}
+          aria-valuenow={value}
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.currentTarget.setPointerCapture(event.pointerId)
+            setDragging(true)
+          }}
+          onPointerMove={(event) => {
+            if (dragging) onChange(valueAt(event.clientX))
+          }}
+          onPointerUp={(event) => {
+            event.currentTarget.releasePointerCapture(event.pointerId)
+            setDragging(false)
+          }}
+          onPointerCancel={() => setDragging(false)}
+          onKeyDown={(event) => {
+            const keys: Record<string, () => void> = {
+              ArrowRight: () => nudge(1),
+              ArrowUp: () => nudge(1),
+              ArrowLeft: () => nudge(-1),
+              ArrowDown: () => nudge(-1),
+              PageUp: () => nudge(10),
+              PageDown: () => nudge(-10),
+              Home: () => onChange(min),
+              End: () => onChange(max),
+            }
+            const action = keys[event.key]
+            if (action) {
+              event.preventDefault()
+              action()
+            }
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
+/** Decimales del paso, para no arrastrar errores de coma flotante. */
+function decimalsOf(step: number): number {
+  const text = String(step)
+  const dot = text.indexOf('.')
+  return dot === -1 ? 0 : text.length - dot - 1
 }

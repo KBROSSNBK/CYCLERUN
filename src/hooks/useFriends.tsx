@@ -23,6 +23,7 @@ import {
   watchFriends,
 } from '@/firebase/friends'
 import { isStale, watchFriendsLive } from '@/firebase/live'
+import { isNativeRuntime } from '@/gps/nativeGeolocation'
 import { liveShareService, type LiveShareState } from '@/services/liveShareService'
 import type { Friend, FriendRequest, LivePresence } from '@/types'
 import { useAuth } from './useAuth'
@@ -214,25 +215,40 @@ export function useFriends(): FriendsContextValue {
 }
 
 /**
- * Publica la posicion mientras la aplicacion esta en primer plano.
+ * Publica la posicion mientras la aplicacion esta en marcha.
  *
- * Se monta una sola vez, en la raiz: basta con tener la app abierta para que
- * los amigos autorizados te vean, sin necesidad de iniciar una carrera ni de
- * estar en una pantalla concreta. Al pasar a segundo plano se deja de publicar
- * y la posicion se borra de la nube, de modo que nadie sigue viendote cuando ya
- * no estas usando la aplicacion.
+ * Se monta una sola vez, en la raiz: basta con abrir la app para que los amigos
+ * autorizados te vean, sin necesidad de iniciar una carrera ni de estar en una
+ * pantalla concreta.
+ *
+ * Hasta donde llega depende de la plataforma:
+ *  - aplicacion nativa: continua en segundo plano y con el telefono bloqueado;
+ *  - navegador: solo con la pestana a la vista, porque el sistema congela la
+ *    pagina al ocultarla.
+ *
+ * En ambos casos se deja de emitir al cerrar la aplicacion, y la posicion se
+ * borra de la nube: con la app cerrada nadie recibe nada.
  */
 export function useAppPresence(): void {
   useEffect(() => {
-    const sync = () => liveShareService.setVisible(document.visibilityState === 'visible')
+    // En la aplicacion nativa el registro continua con el telefono bloqueado o
+    // en segundo plano, porque el servicio en primer plano sigue vivo. En el
+    // navegador no hay nada que hacer: al ocultarse la pestana, el sistema
+    // congela la pagina y corta el GPS.
+    //
+    // En los dos casos se deja de emitir al cerrar la aplicacion: mientras no
+    // este en marcha, nadie debe recibir posiciones.
+    const native = isNativeRuntime()
+    const sync = () =>
+      liveShareService.setVisible(native || document.visibilityState === 'visible')
     const hide = () => liveShareService.setVisible(false)
 
     sync()
-    document.addEventListener('visibilitychange', sync)
+    if (!native) document.addEventListener('visibilitychange', sync)
     window.addEventListener('pagehide', hide)
 
     return () => {
-      document.removeEventListener('visibilitychange', sync)
+      if (!native) document.removeEventListener('visibilitychange', sync)
       window.removeEventListener('pagehide', hide)
       hide()
     }

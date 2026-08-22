@@ -4,6 +4,7 @@ import { FriendsMap, type MapFocus } from '@/components/RouteMap'
 import { ConfirmDialog, EmptyState, Notice, Spinner, Switch } from '@/components/ui'
 import { firebaseEnabled } from '@/firebase/app'
 import { presenceAge } from '@/firebase/live'
+import { isNativeRuntime } from '@/gps/nativeGeolocation'
 import { useAuth } from '@/hooks/useAuth'
 import { useFriends, useLiveShareState } from '@/hooks/useFriends'
 import { useSettings } from '@/hooks/useSettings'
@@ -222,9 +223,19 @@ export function FriendsPage() {
           )}
 
           <p className="field__hint" style={{ marginTop: 'var(--gap-3)' }}>
-            <strong>Con la pantalla bloqueada dejas de emitir.</strong> El navegador congela la
-            página y corta el acceso al GPS; es una limitación del sistema, no de la app. Para una
-            salida larga, empieza una carrera: la pantalla se mantiene encendida mientras grabas.
+            {isNativeRuntime() ? (
+              <>
+                <strong>Sigue registrando con el móvil bloqueado.</strong> Verás una notificación
+                permanente mientras esté activo. Al cerrar la aplicación se detiene y dejas de
+                emitir.
+              </>
+            ) : (
+              <>
+                <strong>Con la pantalla bloqueada dejas de emitir.</strong> El navegador congela la
+                página y corta el acceso al GPS; es una limitación del sistema, no de la app.
+                Instala la aplicación de Android para seguir registrando con el móvil bloqueado.
+              </>
+            )}
           </p>
         </div>
       </section>

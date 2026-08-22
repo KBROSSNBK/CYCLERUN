@@ -9,7 +9,7 @@
  *   npm run icons
  */
 import { deflateSync } from 'node:zlib'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -197,4 +197,55 @@ for (const target of targets) {
   const pixels = drawIcon(target.size, { maskable: target.maskable })
   writeFileSync(resolve(OUT_DIR, target.file), encodePng(pixels, target.size))
   console.log(`✓ ${target.file} (${target.size}×${target.size})`)
+}
+
+// ---------------------------------------------------- iconos de Android
+//
+// El proyecto nativo necesita sus propios tamanos. Se generan con el mismo
+// dibujo que los de la PWA para que la app instalada y la version web se vean
+// igual en la pantalla de inicio.
+
+const ANDROID_RES = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'android', 'app', 'src', 'main', 'res')
+
+const DENSITIES = [
+  { dir: 'mipmap-mdpi', size: 48 },
+  { dir: 'mipmap-hdpi', size: 72 },
+  { dir: 'mipmap-xhdpi', size: 96 },
+  { dir: 'mipmap-xxhdpi', size: 144 },
+  { dir: 'mipmap-xxxhdpi', size: 192 },
+]
+
+/** Recorta el icono a un circulo, para `ic_launcher_round`. */
+function circularize(pixels, size) {
+  const out = Buffer.from(pixels)
+  const radius = size / 2
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const distance = Math.hypot(x + 0.5 - radius, y + 0.5 - radius)
+      const alpha = Math.max(0, Math.min(1, (radius - distance) / 1.2 + 0.5))
+      const offset = (y * size + x) * 4
+      out[offset + 3] = Math.round(out[offset + 3] * alpha)
+    }
+  }
+  return out
+}
+
+if (existsSync(ANDROID_RES)) {
+  for (const { dir, size } of DENSITIES) {
+    const target = resolve(ANDROID_RES, dir)
+    mkdirSync(target, { recursive: true })
+
+    const square = drawIcon(size, { maskable: false })
+    writeFileSync(resolve(target, 'ic_launcher.png'), encodePng(square, size))
+    writeFileSync(resolve(target, 'ic_launcher_round.png'), encodePng(circularize(square, size), size))
+
+    // El icono adaptativo se recorta por el sistema: el dibujo debe caber en la
+    // zona segura central, que es justo lo que hace la variante maskable.
+    const foreground = drawIcon(Math.round(size * 2.25), { maskable: true })
+    writeFileSync(
+      resolve(target, 'ic_launcher_foreground.png'),
+      encodePng(foreground, Math.round(size * 2.25)),
+    )
+    console.log(`✓ android/${dir} (${size}×${size})`)
+  }
 }

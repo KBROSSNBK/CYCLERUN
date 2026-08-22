@@ -1,0 +1,103 @@
+name: Compilar app de Android
+
+# La aplicacion nativa existe por un motivo concreto: en el navegador, apagar
+# la pantalla congela la pagina y corta el GPS, asi que no se puede registrar un
+# recorrido con el telefono bloqueado. El APK se compila aqui porque requiere el
+# SDK de Android y un JDK, no porque forme parte del despliegue web.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'android/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - run: npm ci
+
+      - name: Construir los archivos web
+        env:
+          # Dentro de la app los archivos se sirven desde la raiz del WebView,
+          # no desde /CYCLERUN/ como en GitHub Pages.
+          VITE_BASE_PATH: /
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+        run: npm run build
+
+      - name: Copiar los archivos al proyecto Android
+        run: npx cap sync android
+
+      - name: Compilar el APK
+        run: |
+          set +e
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon 2>&1 | tee ../android-build.log
+          code=${PIPESTATUS[0]}
+          cd ..
+          if [ "$code" -ne 0 ]; then
+            # El log de Actions no se puede leer sin sesión: la cola se publica
+            # como anotación para poder diagnosticar el fallo.
+            summary=$(tail -c 2500 android-build.log | python3 -c "import sys;print(sys.stdin.read().replace('%','%25').replace('\r','%0D').replace('\n','%0A'))")
+            echo "::error title=Fallo compilando el APK::$summary"
+          fi
+          exit "$code"
+
+      - name: Nombrar el archivo
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk cyclerun.apk
+
+      - name: Publicar el APK
+        uses: softprops/action-gh-release@v2
+        with:
+          # Una etiqueta fija que se reemplaza en cada compilación: el enlace de
+          # descarga no cambia nunca y siempre apunta a la última versión.
+          tag_name: android-latest
+          name: CYCLERUN para Android
+          body: |
+            Aplicación de Android de CYCLERUN, compilada desde `main` (${{ github.sha }}).
+
+            **Qué añade sobre la versión web:** sigue registrando el recorrido con
+            el teléfono bloqueado o la app en segundo plano, mediante un servicio
+            con notificación permanente. Al cerrar la aplicación deja de recibir
+            posiciones.
+
+            **Instalación:** descarga `cyclerun.apk` en el móvil y ábrelo. Android
+            pedirá permitir la instalación de orígenes desconocidos, ya que no
+            viene de Play Store. Concede el permiso de ubicación **«Permitir
+            siempre»** y activa la precisión exacta.
+          files: cyclerun.apk
+          fail_on_unmatched_files: true
+          prerelease: false

@@ -8,3 +8,7 @@ dist-ssr
 !.env.example
 .vite
 *.tsbuildinfo
+
+# Artefacto de compilación de Android
+cyclerun.apk
+android-build.log
